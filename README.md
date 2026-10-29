@@ -6,9 +6,7 @@ A plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded b
 
 Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts. The interface and README are available in English, Simplified Chinese and Traditional Chinese. The interface automatically follows DSH’s language, including live changes. DSH `zh` uses Simplified Chinese; `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` use Traditional Chinese. Other languages fall back to English. There is no separate language preference. Unknown backend diagnostics retain their original text for troubleshooting.
 
-Version 0.5.0 follows DSH’s language and replaces periodic auto-sync with one startup attempt. The difference table uses aligned values, capability chips, expandable parameter mappings and a stacked layout in narrow panels.
-
-![Native DSH settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview-050.png)
+Version 0.6.0 prefers the Strata Server output default and displays its source. Version 0.5.0 follows DSH’s language and replaces periodic auto-sync with one startup attempt. The difference table uses aligned values, capability chips, expandable parameter mappings and a stacked layout in narrow panels.
 
 ## What it does
 
@@ -54,7 +52,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.5.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.6.0.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
@@ -91,10 +89,11 @@ No API key needs to be copied into this plugin. Set up or repair credentials in 
 
 ## Budget policy
 
-Strata reports the model/context; it does **not** supply DSH's compaction policy. The following are this plugin's client-side choices, designed around DSH 0.2.1-rc.3's native 4,096-token context safety margin:
+Strata reports model/context and a shared output default through `/props?model=...` → `default_generation_settings.params.n_predict` (the server's shared `max_tokens`). This default is not a hard model limit: an explicit client request overrides it. Strata does **not** supply DSH's compaction policy. The following are this plugin's client-side choices, designed around DSH 0.2.1-rc.3's native 4,096-token context safety margin:
 
 ```text
-ordinary output = min(16384, floor(context × 0.30))  # unless explicitly overridden
+ordinary output = explicit manual override, else verified positive server n_predict
+fallback output = min(16384, floor(context × 0.30))
 compaction headroom = 4096
 summary maxTokens = 4096
 thresholdRatio = 0.8
@@ -102,6 +101,10 @@ retainRatio = 0.16
 effective trigger = floor(min(context × 0.8, context − ordinary output − 4096))
 recent retention = floor((context − ordinary output) × 0.16)
 ```
+
+Output selection: an explicit manual override takes priority; otherwise use a positive integer from matching Strata/model props. Missing/null, `-1` or `0` means no fixed server cap and uses the calculated fallback. Unavailable or unverifiable props also use the fallback and show that the server limit could not be verified. Malformed explicit values are rejected. A positive server cap that leaves too little compaction space is refused, not silently replaced. The source is shown as **Strata Server default**, **Manual override**, or **Automatic calculation**. Summary output remains 4,096; compaction and retention are recalculated from the selected ordinary-output allowance.
+
+These table examples use the calculated fallback (no manual or fixed server limit):
 
 | Context | Ordinary output | Summary output | Headroom | Compaction trigger | Recent retention |
 |---|---:|---:|---:|---:|---:|

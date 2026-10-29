@@ -5,6 +5,14 @@ window.__ModuleLoader__.load({
     const React = require('react');
     const h = React.createElement;
     const translations = {
+"Output limit source: ": {"zh-Hant":"輸出上限來源：","zh-Hans":"输出上限来源："},
+"Strata Server default": {"zh-Hant":"Strata Server 預設值","zh-Hans":"Strata Server 默认值"},
+"Manual override": {"zh-Hant":"手動覆寫","zh-Hans":"手动覆盖"},
+"Automatic calculation": {"zh-Hant":"自動計算","zh-Hans":"自动计算"},
+"Server has no fixed output limit.": {"zh-Hant":"伺服器未設定固定輸出上限。","zh-Hans":"服务器未设置固定输出上限。"},
+"Server output limit could not be verified.": {"zh-Hant":"無法確認伺服器的輸出上限。","zh-Hans":"无法确认服务器的输出上限。"},
+"Leave blank to use the server output default; if absent or unlimited, use 30% of context, up to 16,384. An explicit override takes priority.": {"zh-Hant":"留空會採用伺服器輸出預設值；未提供或無固定上限時，使用上下文的 30%，最多 16,384。明確填寫的覆寫值優先。","zh-Hans":"留空采用服务器输出默认值；未提供或无固定上限时，使用上下文的 30%，最多 16,384。明确填写的覆盖值优先。"},
+"Strata returned an invalid output limit. Review the server setting before syncing.": {"zh-Hant":"Strata 回傳無效的輸出上限，請先檢查伺服器設定。","zh-Hans":"Strata 返回无效的输出上限，请先检查服务器设置。"},
   "Runs once on the next DSH start. Waits for running tasks to finish; no periodic server checks.": {
     "zh-Hant": "下次啟動 DSH 時同步一次；若有工作執行中，會等到閒置，不再定期檢查伺服器。",
     "zh-Hans": "下次启动 DSH 时同步一次；如有任务运行中，会等待空闲，不再定期检查服务器。"
@@ -123,9 +131,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "操作失敗。",
     "zh-Hans": "操作失败。"
   },
-  "Align DSH with the model loaded by Strata Server. The server reports the model and context; this plugin calculates output and compaction budgets.": {
-    "zh-Hant": "讓 DSH 對齊 Strata Server 已載入的模型。模型與上下文由伺服器提供，輸出與壓縮預算由此外掛計算。",
-    "zh-Hans": "让 DSH 对齐 Strata Server 已加载的模型。模型与上下文由服务器提供，输出与压缩预算由此插件计算。"
+  "Align DSH with the model loaded by Strata Server. The server supplies model, context and any fixed output default; this plugin calculates fallback output and compaction budgets.": {
+    "zh-Hant": "讓 DSH 對齊 Strata Server 已載入的模型。模型、上下文及固定輸出預設值由伺服器提供；此外掛計算備用輸出與壓縮預算。",
+    "zh-Hans": "让 DSH 对齐 Strata Server 已加载的模型。模型、上下文及固定输出默认值由服务器提供；此插件计算备用输出与压缩预算。"
   },
   "Loading sync settings...": {
     "zh-Hant": "正在載入同步設定…",
@@ -143,13 +151,13 @@ window.__ModuleLoader__.load({
     "zh-Hant": "選擇已設定的供應者",
     "zh-Hans": "选择已设置的提供方"
   },
-  "Response output limit (blank for automatic)": {
-    "zh-Hant": "回覆輸出上限（留空自動計算）",
-    "zh-Hans": "回复输出上限（留空自动计算）"
+  "Output limit override (blank to follow Strata)": {
+    "zh-Hant": "輸出上限覆寫（留空跟隨 Strata）",
+    "zh-Hans": "输出上限覆盖（留空跟随 Strata）"
   },
-  "30% of context, up to 16,384": {
-    "zh-Hant": "上下文的 30%，最多 16,384",
-    "zh-Hans": "上下文的 30%，最多 16,384"
+  "Strata default, otherwise automatic": {
+    "zh-Hant": "Strata 預設值，否則自動計算",
+    "zh-Hans": "Strata 默认值，否则自动计算"
   },
   "Uses the URL and credentials already configured in DSH. API keys are never displayed or copied here.": {
     "zh-Hant": "使用 DSH 現有的網址與認證，不在此顯示或複製 API key。",
@@ -312,7 +320,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       const dirty = !!state && (providerId !== state.providerId || outputTokens !== state.outputTokens || auto !== state.autoSync || follow !== state.followLoadedModel);
       return h('section', {className:'strata-sync', 'aria-label':'Strata Sync'},
         h('style', null, css),
-        h('header', null, h('h2',null,'Strata Sync'), h('p',{className:'ss-muted'},t("Align DSH with the model loaded by Strata Server. The server reports the model and context; this plugin calculates output and compaction budgets."))),
+        h('header', null, h('h2',null,'Strata Sync'), h('p',{className:'ss-muted'},t("Align DSH with the model loaded by Strata Server. The server supplies model, context and any fixed output default; this plugin calculates fallback output and compaction budgets."))),
         !state && !error && h('div',{className:'ss-status',role:'status'},t("Loading sync settings...")),
         state?.busy && h('div',{className:'ss-status',role:'status'},t("DSH is running a task. Synchronization will wait until all tasks are idle.")),
         error && h('div',{className:'ss-status ss-error',role:'alert'},diagnostic(error)),
@@ -320,7 +328,8 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         h('div',{className:'ss-grid'},
           h('label',null,t("Strata provider"),h('select',{value:providerId,onChange:e=>{setProviderId(e.target.value);setPreview(null);},disabled:pending||!state},
             h('option',{value:''},t("Choose an existing provider")), ...(state?.providers||[]).map(p=>h('option',{key:p.id,value:p.id},p.id)))),
-          h('label',null,t("Response output limit (blank for automatic)"),h('input',{type:'number',min:1,step:1,value:output,placeholder:t("30% of context, up to 16,384"),onChange:e=>{setOutput(e.target.value);setPreview(null);},disabled:pending||!state}))),
+          h('label',null,t("Output limit override (blank to follow Strata)"),h('input',{type:'number',min:1,step:1,value:output,placeholder:t("Strata default, otherwise automatic"),onChange:e=>{setOutput(e.target.value);setPreview(null);},disabled:pending||!state}))),
+        h('p',{className:'ss-muted'},t("Leave blank to use the server output default; if absent or unlimited, use 30% of context, up to 16,384. An explicit override takes priority.")),
         h('p',{className:'ss-muted'},t("Uses the URL and credentials already configured in DSH. API keys are never displayed or copied here.")),
         h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:follow,onChange:e=>{setFollow(e.target.checked);setPreview(null);},disabled:pending||!state}),t("Follow the loaded Strata model as the default")),
         h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:auto,onChange:e=>setAuto(e.target.checked),disabled:pending||!state}),t("Automatically sync when DSH starts")),
@@ -336,6 +345,9 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
             h('div',null,h('strong',null,format(preview.budget?.contextWindow)),h('div',{className:'ss-muted'},t("Context tokens"))),
             h('div',null,h('strong',null,format(preview.budget?.outputTokens)),h('div',{className:'ss-muted'},t("Response output limit"))),
             h('div',null,h('strong',null,format(preview.budget?.summaryMaxTokens)),h('div',{className:'ss-muted'},t("Summary output limit")))),
+          h('p',{className:'ss-muted'},t('Output limit source: '),t(({server:'Strata Server default',manual:'Manual override',calculated:'Automatic calculation'})[preview.budget?.outputSource] || 'Automatic calculation')),
+          ['missing','unlimited'].includes(preview.server?.model?.outputLimitStatus) && h('p',{className:'ss-muted'},t('Server has no fixed output limit.')),
+          ['unavailable','unverified'].includes(preview.server?.model?.outputLimitStatus) && h('p',{className:'ss-muted'},t('Server output limit could not be verified.')),
           h('p',null,t('Input types'),': ',preview.server?.model?.capabilities?.input ? t(preview.server.model.capabilities.input.includes('image')?'Text + image':'Text') : t('Unconfirmed — keep current setting')),
           h('p',null,t('Reasoning levels'),': ',preview.capabilityEdits?.reasoningEfforts ? Object.keys(preview.capabilityEdits.reasoningEfforts).join(' / ') : t('Unconfirmed — keep current setting')),
           preview.capabilityEdits?.reasoningEfforts && h('p',{className:'ss-muted'},t('Verified template: '),preview.server.model.capabilities.reasoning.family),

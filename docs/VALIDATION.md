@@ -2,6 +2,14 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## Server output defaults 0.6.0
+
+- All 65 tests pass. New coverage includes fixed server caps, absent/null and unlimited (-1/0) defaults, unavailable props, wrong model/Strata identity, invalid types, insufficient compaction space, manual precedence, stale-preview rejection after server-cap changes, applied model limits and translated output provenance.
+- Uses the existing metadata-only GET /props?model=... response, specifically default_generation_settings.params.n_predict. [Strata server source](https://github.com/Niko1221/Strata/blob/main/serve/server.py) exposes the shared max_tokens default there; it is a default rather than a hard model maximum.
+- Native isolated DSH 0.2.1-rc.3 startup sync adopted an 8,192-token fixture default at 32,768 context and saved a backup. English and Chinese previews reported the server source, a 20,480-token compaction threshold and unchanged 4,096 summary allowance.
+- Changing only the fixture cap to -1 yielded a fresh preview of 9,830 output tokens, Automatic calculation, and an 18,842-token compaction threshold. This fallback preview was not applied. Traditional Chinese provenance is covered by UI tests.
+- The updated English settings screenshot is retained locally only; it is not published with this release. Production DSH and the actual Strata server were not modified; no inference requests were sent.
+
 ## DSH language and startup synchronization 0.5.0
 
 - All 58 tests pass. Regression coverage includes DSH locale subscriptions and cleanup, ignoring obsolete browser language preferences, Chinese regional variants, idle deferral, one attempt per process/profile, no repeat reads after completion/failure, HMR deduplication and manual retry availability.

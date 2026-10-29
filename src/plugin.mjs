@@ -166,7 +166,7 @@ export function apply(ctx, initialConfig) {
     ensureOpen();
     const discovered = await discoverStrata(route.baseURL, apiKey);
     ensureOpen();
-    const budget = planBudget(discovered.model.contextWindow, { outputTokens });
+    const budget = planBudget(discovered.model.contextWindow, { outputTokens, serverOutputTokens: discovered.model.serverOutputTokens });
     const configured = (route.models ?? []).find((model) => model.id === discovered.model.id);
     const capabilities = discovered.model.capabilities;
     const { edits: capabilityEdits, warnings: capabilityWarnings } = capabilityChanges(capabilities, route, configured);

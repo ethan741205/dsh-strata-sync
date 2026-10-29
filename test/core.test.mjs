@@ -121,3 +121,37 @@ test('timeout aborts the metadata fetch', async () => {
     options.signal.addEventListener('abort', () => { clearTimeout(timer); reject(new Error('aborted')); }, { once: true });
   }) }), errorCode('TIMEOUT'));
 });
+
+test('output budget prefers explicit override, then server default, then calculation', () => {
+  assert.equal(planBudget(32768,{serverOutputTokens:8192}).outputTokens,8192);
+  assert.equal(planBudget(32768,{serverOutputTokens:8192}).outputSource,'server');
+  const manual=planBudget(32768,{serverOutputTokens:8192,outputTokens:4096});
+  assert.equal(manual.outputTokens,4096); assert.equal(manual.outputSource,'manual');
+  assert.equal(planBudget(32768,{serverOutputTokens:null}).outputTokens,9830);
+  assert.equal(planBudget(32768).outputSource,'calculated');
+  // Never silently replace a real server cap that makes DSH compaction invalid.
+  for(const serverOutputTokens of [30000,32768,999999]) assert.throws(()=>planBudget(32768,{serverOutputTokens}),errorCode('INVALID_OUTPUT_BUDGET'));
+});
+const outputProps = value => ({build_info:'Strata 0.1.52',model_alias:'qwen',default_generation_settings:{params:{n_predict:value}}});
+const discoverOutput = props => discoverStrata('https://strata.test','',{fetch:async url=>url.includes('/props?')?json(props):stub([loaded()])(url)});
+test('verified model props supply output default independently of reasoning-template support', async () => {
+  const r=await discoverOutput(outputProps(8192));
+  assert.equal(r.model.serverOutputTokens,8192);assert.equal(r.model.outputLimitStatus,'server');
+  assert.equal(r.model.capabilities.reasoning,null);
+});
+test('missing or unlimited server output falls back; wrong model and identity are not trusted', async () => {
+  for(const [value,status]of [[undefined,'missing'],[null,'missing'],[-1,'unlimited'],[0,'unlimited']]){
+    const r=await discoverOutput(outputProps(value));
+    assert.equal(r.model.serverOutputTokens,null);assert.equal(r.model.outputLimitStatus,status);
+    assert.equal(planBudget(r.model.contextWindow,{serverOutputTokens:r.model.serverOutputTokens}).outputTokens,9830);
+  }
+  for(const props of [{...outputProps(8192),model_alias:'different'},{...outputProps(8192),build_info:'unverified'}]){
+    const r=await discoverOutput(props); assert.equal(r.model.serverOutputTokens,null); assert.equal(r.model.outputLimitStatus,'unverified');
+  }
+  const r=await discoverStrata('https://strata.test','',{fetch:async url=>url.includes('/props?')?new Response('',{status:404}):stub([loaded()])(url)});
+  assert.equal(r.model.outputLimitStatus,'unavailable');
+});
+test('malformed explicit server output is rejected instead of silently choosing another cap', async () => {
+  for(const value of ['8192',true,-2,1.5,{},Number.MAX_SAFE_INTEGER+1])
+    await assert.rejects(discoverOutput(outputProps(value)),errorCode('INVALID_SERVER_OUTPUT_BUDGET'));
+});

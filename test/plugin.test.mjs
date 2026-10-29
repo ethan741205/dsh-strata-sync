@@ -63,6 +63,7 @@ async function harness(options = {}) {
     assert.equal(init.headers.Authorization, 'Bearer do-not-expose-test-secret');
     if (options.beforeFetch) await options.beforeFetch(url);
     if (options.serverStatus) return new Response('private server error body must not be shown', { status: options.serverStatus });
+    if (url.includes('/props?') && options.props) return new Response(JSON.stringify(options.props()),{headers:{'content-type':'application/json'}});
     return new Response(JSON.stringify(url.endsWith('/models') ? { data: [{ id: 'qwen', status: { value: 'loaded' }, meta: { n_ctx: 32768 }, ...(options.modalities ? {architecture:{input_modalities:options.modalities}} : {}) }] } : [{ n_ctx: 32768 }]), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   const ctx = {
@@ -360,4 +361,22 @@ test('failed startup reports its error without periodic retries; manual preview 
     await h.poll(); h.reload(); await h.poll(); assert.equal(h.requests,requests);
     await h.call('preview'); assert.ok(h.requests>requests);
   } finally { await h.close(); }
+});
+
+test('server output default updates model and compaction policy; changed default invalidates preview', async () => {
+  let cap=8192;
+  const h=await harness({props:()=>({build_info:'Strata 0.1.52',model_alias:'qwen',default_generation_settings:{params:{n_predict:cap}}})});
+  try {
+    const first=await h.call('preview');assert.equal(first.value.budget.outputTokens,8192);assert.equal(first.value.budget.outputSource,'server');
+    cap=4096;
+    const stale=await h.call('apply',{fingerprint:first.value.fingerprint});assert.equal(stale.error.code,'stale-preview');assert.equal(h.writes,0);
+    const fresh=await h.call('preview');const applied=await h.call('apply',{fingerprint:fresh.value.fingerprint});assert.equal(applied.ok,true);
+    assert.equal(h.entries[0].options.config.providers['strata-server'].models[0].maxTokens,4096);
+    assert.equal(fresh.value.budget.thresholdTokens,24576);
+    const manual=await h.call('preview',{outputTokens:2048});assert.equal(manual.value.budget.outputSource,'manual');assert.equal(manual.value.budget.outputTokens,2048);
+  } finally {await h.close();}
+});
+test('unsafe server output fails before backup or settings writes',async()=>{
+ const h=await harness({props:()=>({build_info:'Strata 0.1.52',model_alias:'qwen',default_generation_settings:{params:{n_predict:32000}}})});
+ try{const r=await h.call('preview');assert.equal(r.error.code,'INVALID_OUTPUT_BUDGET');assert.equal(h.writes,0);assert.equal(await h.backupCount(),0);}finally{await h.close();}
 });

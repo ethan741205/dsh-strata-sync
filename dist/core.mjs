@@ -58,14 +58,15 @@ export function normalizeBaseURL(value) {
 }
 
 /**
- * Derive DSH settings; these are client policy, not values reported by Strata.
+ * Select the output allowance, then derive DSH's client-side compaction policy.
  * The 4096 headroom also matches the native pi-ai context safety margin.
  */
-export function planBudget(contextWindow, { outputTokens } = {}) {
+export function planBudget(contextWindow, { outputTokens, serverOutputTokens } = {}) {
   if (!isContext(contextWindow) || contextWindow < 8192) {
     fail('UNSUPPORTED_CONTEXT', 'A verified context window of at least 8,192 tokens is required.');
   }
-  const output = outputTokens ?? Math.min(16384, Math.floor(contextWindow * 0.3));
+  const output = outputTokens ?? serverOutputTokens ?? Math.min(16384, Math.floor(contextWindow * 0.3));
+  const outputSource = outputTokens != null ? 'manual' : serverOutputTokens != null ? 'server' : 'calculated';
   if (!Number.isSafeInteger(output) || output < 1 || output >= contextWindow) {
     fail('INVALID_OUTPUT_BUDGET', 'The output budget must be a positive integer smaller than the context window.');
   }
@@ -79,7 +80,7 @@ export function planBudget(contextWindow, { outputTokens } = {}) {
     fail('INVALID_OUTPUT_BUDGET', 'This output budget leaves too little room for automatic compaction; lower it.');
   }
   return Object.freeze({
-    source: 'client-derived', contextWindow, outputTokens: output,
+    source: 'client-derived', contextWindow, outputTokens: output, outputSource,
     headroomTokens, summaryMaxTokens: headroomTokens, thresholdRatio, retainRatio,
     messageBudgetTokens, thresholdTokens,
     thresholdPercent: thresholdTokens / contextWindow * 100,
@@ -209,20 +210,33 @@ export async function discoverStrata(baseURL, apiKey = '', options = {}) {
     warnings.push('SLOTS_OVERRIDE_MODEL_CONTEXT');
   }
   let evidence = {};
+  let props;
   try {
-    const props = await readJSON(`${normalized.slice(0, -3)}/props?model=${encodeURIComponent(selected.id)}`, apiKey, request);
+    props = await readJSON(`${normalized.slice(0, -3)}/props?model=${encodeURIComponent(selected.id)}`, apiKey, request);
     evidence = {
       verifiedStrata: typeof props.build_info === 'string' && /^Strata \d+\.\d+(?:\.\d+)?(?:\b|$)/u.test(props.build_info),
       modelMatched: props.model_alias === selected.id,
       templateHash: typeof props.chat_template === 'string'
         ? createHash('sha256').update(props.chat_template.replace(/\r\n/g, '\n')).digest('hex') : null,
     };
-  } catch { /* Optional metadata: preserve reasoning on any failure. */ }
+  } catch { /* Optional metadata: preserve reasoning and calculate output on failure. */ }
+  let serverOutputTokens = null;
+  let outputLimitStatus = props == null ? 'unavailable' : 'unverified';
+  if (evidence.verifiedStrata && evidence.modelMatched) {
+    const value = props.default_generation_settings?.params?.n_predict;
+    outputLimitStatus = value == null ? 'missing' : value === -1 || value === 0 ? 'unlimited' : 'server';
+    if (outputLimitStatus === 'server') {
+      if (!Number.isSafeInteger(value) || value < 1) {
+        fail('INVALID_SERVER_OUTPUT_BUDGET', 'Strata returned an invalid output limit. Review the server setting before syncing.');
+      }
+      serverOutputTokens = value;
+    }
+  }
   const capabilities = planModelCapabilities(selected.modalities, evidence);
   warnings.push(...capabilities.warnings);
   return {
     baseURL: normalized,
-    model: { id: selected.id, name: selected.name, contextWindow, contextSource: liveContext !== null ? 'slots.n_ctx' : 'models.meta.n_ctx', capabilities },
+    model: { id: selected.id, name: selected.name, contextWindow, contextSource: liveContext !== null ? 'slots.n_ctx' : 'models.meta.n_ctx', serverOutputTokens, outputLimitStatus, capabilities },
     models: models.map(({modalities, ...model}) => model), warnings,
   };
 }

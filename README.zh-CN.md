@@ -6,9 +6,7 @@
 
 UI 支持 English、简体中文、繁體中文。自动跟随 DSH 界面语言并实时更新，不提供独立语言菜单。DSH 的 `zh` 对应简体中文，`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO` 对应繁体中文；其他语言使用英文。服务器返回的未知诊断消息保留原文，方便排查。
 
-0.5.0 改为跟随 DSH 语言与启动时单次同步，保留差异表的数值对齐、能力标签、可展开的参数映射，以及窄窗口逐项比较。
-
-![原生 DSH 设置界面（英文）](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview-050.png)
+0.6.0 优先读取 Strata Server 输出默认值并标示来源；0.5.0 改为跟随 DSH 语言与启动时单次同步，保留差异表的数值对齐、能力标签、可展开的参数映射，以及窄窗口逐项比较。
 
 ## 功能
 
@@ -45,7 +43,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.5.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.6.0.tgz
 ```
 
 执行最后一行前，先完成任务并完全退出 DSH Desktop，再使用官方 CLI 安装，完成后重新打开。在其他目录执行时，请使用安装包的绝对路径。首次安装会自动选中 bundle；已安装但禁用的 bundle 需在插件管理器重新启用。
@@ -70,10 +68,11 @@ dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.5.0.tgz
 
 ## 预算策略
 
-Strata 提供模型与上下文信息，**不提供 DSH 压缩策略**。以下是此插件的客户端策略，配合 DSH 0.2.1-rc.3 原生 4,096-token 上下文安全余量：
+Strata 通过 `/props?model=...` 的 `default_generation_settings.params.n_predict` 提供共享 `max_tokens` 默认值，以及模型与上下文信息。这不是模型硬性上限，客户端明确指定的请求值会覆盖它。Strata **不提供 DSH 压缩策略**。以下是此插件的客户端策略，配合 DSH 0.2.1-rc.3 原生 4,096-token 上下文安全余量：
 
 ```text
-普通输出 = min(16384, floor(上下文 × 0.30))，除非另行指定
+普通输出 = 明确手动覆盖值，否则采用已确认的服务器正整数 n_predict
+备用输出 = min(16384, floor(上下文 × 0.30))
 压缩余量 = 4096
 摘要 maxTokens = 4096
 thresholdRatio = 0.8
@@ -81,6 +80,10 @@ retainRatio = 0.16
 实际压缩阈值 = floor(min(上下文 × 0.8, 上下文 − 普通输出 − 4096))
 近期对话保留量 = floor((上下文 − 普通输出) × 0.16)
 ```
+
+输出选择顺序：手动覆盖 → 已确认的服务器正整数值 → 自动计算。缺少值、null、`-1` 或 `0` 表示没有固定上限；无法获取或确认服务器与模型身份时，也使用备用计算并显示原因。明确但格式错误的值会拒绝同步；正数上限若使压缩空间不足，也会拒绝，不会悄悄换成其他值。UI 显示“Strata Server 默认值／手动覆盖／自动计算”。摘要上限仍是 4,096，压缩阈值与保留量按选定的普通输出上限重算。
+
+下表为没有手动覆盖或固定服务器上限时的备用计算示例：
 
 | 上下文 | 普通输出 | 摘要输出 | 压缩余量 | 压缩阈值 | 近期保留量 |
 |---|---:|---:|---:|---:|---:|

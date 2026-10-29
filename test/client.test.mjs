@@ -218,3 +218,12 @@ test('capability preservation warnings and labels are translated in both Chinese
   assert.match(ui.container.textContent,/无法确认 — 保留原设置/);
   assert.match(ui.container.textContent,/提供方默认推理等级/);
 });
+
+test('output provenance and fallback explanations are available in all three languages',async t=>{
+ for(const [source,labels]of [['server',['Strata Server default','Strata Server 預設值','Strata Server 默认值']],['manual',['Manual override','手動覆寫','手动覆盖']],['calculated',['Automatic calculation','自動計算','自动计算']]]){
+   const ui=await mount({previewResult:preview({budget:{outputTokens:8192,outputSource:source},server:{model:{id:'qwen',outputLimitStatus:'unlimited'}}})});t.after(()=>ui.unmount());
+   await ui.click(ui.button('Check differences'));
+   for(const [i,locale]of ['en','zh-Hant','zh-Hans'].entries()){await changeLanguage(ui,locale);assert.ok(ui.container.textContent.includes(labels[i]));}
+   assert.match(ui.container.textContent,/服务器未设置固定输出上限/);
+ }
+});
