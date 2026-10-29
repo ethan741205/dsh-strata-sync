@@ -27,11 +27,11 @@ function preview(overrides = {}) {
     ...overrides };
 }
 
-async function mount({ initial = status(), previewResult = preview(), failEndpoint, initialStatusGate } = {}) {
+async function mount({ initial = status(), previewResult = preview(), failEndpoint, initialStatusGate, storage = new Map() } = {}) {
   const calls = [], intervals = new Map(), effectDisposers = [];
   let plugin, registration, component, current = initial, timerId = 0, unmounted = false, statusReads = 0;
   vm.runInNewContext(source, {
-    window: { __ModuleLoader__: { load(entry) {
+    window: { localStorage: {getItem: key => storage.get(key), setItem: (key,value) => storage.set(key,value)}, __ModuleLoader__: { load(entry) {
       assert.equal(typeof entry.id, 'string');
       plugin = entry.factory(name => { assert.equal(name, 'react'); return React; });
     } } },
@@ -91,7 +91,7 @@ test('native module loader registers an English Settings section without display
   assert.match(details.container.textContent, /slots.n_ctx/);
   assert.match(details.container.textContent, /57\.50/);
   assert.equal(details.container.querySelectorAll('tbody tr').length, 2);
-  assert.ok(!/[\u3400-\u9fff]/u.test(details.container.textContent), 'Settings UI should use English text');
+  assert.match(details.container.textContent, /Choose an existing provider/);
 });
 
 test('dirty preferences must save before preview, and successful apply invalidates the preview', async t => {
@@ -154,7 +154,7 @@ test('initial loading disables controls until authoritative preferences arrive',
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   const ui = await mount({ initialStatusGate: gate }); t.after(() => ui.unmount());
-  for (const control of ui.container.querySelectorAll('input, select, button')) {
+  for (const control of ui.container.querySelectorAll('input, select:not([aria-label="Language"]), button')) {
     assert.equal(control.disabled, true, `Control available before initial status: ${control.tagName}`);
   }
   assert.equal(ui.calls.length, 1);
@@ -162,4 +162,49 @@ test('initial loading disables controls until authoritative preferences arrive',
   for (const control of ui.container.querySelectorAll('input, select')) assert.equal(control.disabled, false);
   assert.equal(ui.button('Check differences').disabled, false);
   assert.equal(ui.button('Back up and sync').disabled, true);
+});
+
+async function changeLanguage(ui, value) {
+  await act(async () => {
+    const select = ui.container.querySelector('select[aria-label="Language"]');
+    select.value = value;
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  });
+}
+
+test('Chinese locales translate previews and notices without changing synchronization preferences', async t => {
+  const ui = await mount({ previewResult: preview({ server: { model: { id: 'qwen-local' }, warnings: ['SLOTS_CONTEXT_UNAVAILABLE'] } }) });
+  t.after(() => ui.unmount());
+  const initialCalls = ui.calls.length;
+  await changeLanguage(ui, 'zh-Hant');
+  assert.equal(ui.calls.length, initialCalls);
+  await ui.click(ui.button('檢查差異'));
+  assert.match(ui.container.textContent, /上下文視窗/);
+  assert.match(ui.container.textContent, /執行中的 slot 未提供上下文大小/);
+  await changeLanguage(ui, 'zh-Hans');
+  assert.match(ui.container.textContent, /上下文窗口/);
+  assert.match(ui.container.textContent, /运行中的 slot 未提供上下文大小/);
+  assert.equal(ui.calls.filter(c => c.name === 'configure' || c.name === 'apply').length, 0);
+  await ui.click(ui.button('备份并同步'));
+  assert.match(ui.container.textContent, /已同步并备份/);
+  await changeLanguage(ui, 'zh-Hant');
+  assert.match(ui.container.textContent, /已同步並備份/);
+});
+
+test('language persists locally across remounts and invalid values fall back to English', async t => {
+  const storage = new Map();
+  const first = await mount({ storage });
+  await changeLanguage(first, 'zh-Hant');
+  await first.unmount();
+  const second = await mount({ storage }); t.after(() => second.unmount());
+  assert.ok(second.button('檢查差異'));
+  const invalid = await mount({ storage: new Map([['strata-sync.language', 'invalid']]) }); t.after(() => invalid.unmount());
+  assert.ok(invalid.button('Check differences'));
+});
+
+test('unknown backend diagnostics remain intact with a localized label', async t => {
+  const ui = await mount({ failEndpoint: 'preview' }); t.after(() => ui.unmount());
+  await changeLanguage(ui, 'zh-Hans');
+  await ui.click(ui.button('检查差异'));
+  assert.equal(ui.container.querySelector('[role=alert]').textContent, '服务器诊断：Connection unavailable');
 });

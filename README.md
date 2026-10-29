@@ -1,10 +1,12 @@
 # DSH Strata Sync
 
+**English** · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
+
 A community plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded by **Strata Server**, using a native DSH settings UI. This is not an official DeepSeek or Strata product.
 
-Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization while DSH is idle. The interface and documentation are in English.
+Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization while DSH is idle. The interface and README are available in English, Simplified Chinese and Traditional Chinese. Choose a language at the top of the plugin page. English is the default; the selection is stored in the current browser only and does not change DSH’s global language or model settings. Unknown backend diagnostics retain their original text for troubleshooting.
 
-![Native DSH Strata Sync settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview.jpg?v=0.2.0)
+![Native DSH Strata Sync settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview.jpg?v=0.3.0)
 
 ## What it does
 
@@ -36,7 +38,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.2.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.3.0.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
@@ -52,6 +54,12 @@ Then open **Settings → Strata Sync**:
 5. Start a new conversation to use the new Agent preset revision.
 
 No API key needs to be copied into this plugin. Set up or repair credentials in DSH Models settings.
+
+## Changes in 0.3.0
+
+- Adds English, Simplified Chinese and Traditional Chinese UI selection with local persistence.
+- Includes all three README editions in the package.
+- Keeps the synchronization backend and budgets unchanged.
 
 ## Changes in 0.2.0
 

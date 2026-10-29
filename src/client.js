@@ -4,6 +4,208 @@ window.__ModuleLoader__.load({
   factory: (require) => {
     const React = require('react');
     const h = React.createElement;
+    const translations = {
+  "Context window": {
+    "zh-Hant": "上下文視窗",
+    "zh-Hans": "上下文窗口"
+  },
+  "Response output limit": {
+    "zh-Hant": "回覆輸出上限",
+    "zh-Hans": "回复输出上限"
+  },
+  "Compaction headroom": {
+    "zh-Hant": "壓縮餘裕",
+    "zh-Hans": "压缩余量"
+  },
+  "Summary output limit": {
+    "zh-Hant": "摘要輸出上限",
+    "zh-Hans": "摘要输出上限"
+  },
+  "Compaction threshold": {
+    "zh-Hant": "壓縮門檻",
+    "zh-Hans": "压缩阈值"
+  },
+  "Recent conversation retention": {
+    "zh-Hant": "近期對話保留量",
+    "zh-Hans": "近期对话保留量"
+  },
+  "Model": {
+    "zh-Hant": "模型",
+    "zh-Hans": "模型"
+  },
+  "Default model": {
+    "zh-Hant": "預設模型",
+    "zh-Hans": "默认模型"
+  },
+  "Compaction ratio ceiling": {
+    "zh-Hant": "壓縮比例上限",
+    "zh-Hans": "压缩比例上限"
+  },
+  "Recent conversation retention ratio": {
+    "zh-Hant": "近期對話保留比例",
+    "zh-Hans": "近期对话保留比例"
+  },
+  "Not set": {
+    "zh-Hant": "未設定",
+    "zh-Hans": "未设置"
+  },
+  "Automatic compaction is disabled in an affected Agent preset. Sync preserves that choice.": {
+    "zh-Hant": "受影響的 Agent 範本已停用自動壓縮，同步會保留此選擇。",
+    "zh-Hans": "受影响的 Agent 预设已停用自动压缩，同步会保留此选择。"
+  },
+  "Live slots do not report a context size. Using the model context reported by Strata.": {
+    "zh-Hant": "執行中的 slot 未提供上下文大小，將使用 Strata 模型資訊。",
+    "zh-Hans": "运行中的 slot 未提供上下文大小，将使用 Strata 模型信息。"
+  },
+  "The active engine context differs from the model metadata. Using the active engine context.": {
+    "zh-Hant": "引擎的實際上下文與模型資訊不同，將採用引擎的實際值。",
+    "zh-Hans": "引擎的实际上下文与模型信息不同，将采用引擎的实际值。"
+  },
+  "Live slot information is unavailable. Using the model context reported by Strata.": {
+    "zh-Hant": "無法取得執行中的 slot 資訊，將使用 Strata 模型資訊。",
+    "zh-Hans": "无法获取运行中的 slot 信息，将使用 Strata 模型信息。"
+  },
+  "The operation failed.": {
+    "zh-Hant": "操作失敗。",
+    "zh-Hans": "操作失败。"
+  },
+  "Align DSH with the model loaded by Strata Server. The server reports the model and context; this plugin calculates output and compaction budgets. A community plugin, not an official Strata or DeepSeek product.": {
+    "zh-Hant": "讓 DSH 對齊 Strata Server 已載入的模型。模型與上下文由伺服器提供，輸出與壓縮預算由此外掛計算。這是社群外掛，非 Strata 或 DeepSeek 官方產品。",
+    "zh-Hans": "让 DSH 对齐 Strata Server 已加载的模型。模型与上下文由服务器提供，输出与压缩预算由此插件计算。这是社区插件，非 Strata 或 DeepSeek 官方产品。"
+  },
+  "Loading sync settings...": {
+    "zh-Hant": "正在載入同步設定…",
+    "zh-Hans": "正在加载同步设置…"
+  },
+  "DSH is running a task. Synchronization will wait until all tasks are idle.": {
+    "zh-Hant": "DSH 正在執行工作，同步會等到所有工作閒置後進行。",
+    "zh-Hans": "DSH 正在执行任务，同步会等到所有任务空闲后进行。"
+  },
+  "Strata provider": {
+    "zh-Hant": "Strata 供應者",
+    "zh-Hans": "Strata 提供方"
+  },
+  "Choose an existing provider": {
+    "zh-Hant": "選擇已設定的供應者",
+    "zh-Hans": "选择已设置的提供方"
+  },
+  "Response output limit (blank for automatic)": {
+    "zh-Hant": "回覆輸出上限（留空自動計算）",
+    "zh-Hans": "回复输出上限（留空自动计算）"
+  },
+  "30% of context, up to 16,384": {
+    "zh-Hant": "上下文的 30%，最多 16,384",
+    "zh-Hans": "上下文的 30%，最多 16,384"
+  },
+  "Uses the URL and credentials already configured in DSH. API keys are never displayed or copied here.": {
+    "zh-Hant": "使用 DSH 現有的網址與認證，不在此顯示或複製 API key。",
+    "zh-Hans": "使用 DSH 现有的网址与认证，不在此显示或复制 API key。"
+  },
+  "Follow the loaded Strata model as the default": {
+    "zh-Hant": "預設模型跟隨 Strata 已載入的模型",
+    "zh-Hans": "默认模型跟随 Strata 已加载的模型"
+  },
+  "Automatically sync while idle (check every 60 seconds)": {
+    "zh-Hant": "閒置時自動同步（每 60 秒檢查）",
+    "zh-Hans": "空闲时自动同步（每 60 秒检查）"
+  },
+  "Sync preferences saved.": {
+    "zh-Hant": "同步偏好已儲存。",
+    "zh-Hans": "同步偏好已保存。"
+  },
+  "Save preferences": {
+    "zh-Hant": "儲存偏好",
+    "zh-Hans": "保存偏好"
+  },
+  "Working...": {
+    "zh-Hant": "處理中…",
+    "zh-Hans": "处理中…"
+  },
+  "Check differences": {
+    "zh-Hant": "檢查差異",
+    "zh-Hans": "检查差异"
+  },
+  "Synced and backed up the original settings. Start a new conversation to use the updated compaction policy.": {
+    "zh-Hant": "已同步並備份原設定。請開新對話使用更新後的壓縮政策。",
+    "zh-Hans": "已同步并备份原设置。请开启新对话使用更新后的压缩策略。"
+  },
+  "Settings already match. No changes needed.": {
+    "zh-Hant": "設定已一致，無須變更。",
+    "zh-Hans": "设置已一致，无需更改。"
+  },
+  "Back up and sync": {
+    "zh-Hant": "備份並同步",
+    "zh-Hans": "备份并同步"
+  },
+  "Save preferences before checking for differences.": {
+    "zh-Hant": "請先儲存偏好，再檢查差異。",
+    "zh-Hans": "请先保存偏好，再检查差异。"
+  },
+  "Context tokens": {
+    "zh-Hant": "上下文 tokens",
+    "zh-Hans": "上下文 tokens"
+  },
+  "Context source: ": {
+    "zh-Hant": "上下文來源：",
+    "zh-Hans": "上下文来源："
+  },
+  "Server model metadata": {
+    "zh-Hant": "伺服器模型資訊",
+    "zh-Hans": "服务器模型信息"
+  },
+  "Affected presets: ": {
+    "zh-Hant": "受影響的範本：",
+    "zh-Hans": "受影响的预设："
+  },
+  ". Existing conversations retain their preset revision. Start a new conversation to use the updated compaction budget.": {
+    "zh-Hant": "。既有對話保留原範本版本，請開新對話套用更新的壓縮預算。",
+    "zh-Hans": "。已有对话保留原预设版本，请开启新对话应用更新的压缩预算。"
+  },
+  "Setting": {
+    "zh-Hant": "設定",
+    "zh-Hans": "设置"
+  },
+  "Current": {
+    "zh-Hant": "目前",
+    "zh-Hans": "当前"
+  },
+  "After sync": {
+    "zh-Hant": "同步後",
+    "zh-Hans": "同步后"
+  },
+  "Settings are aligned.": {
+    "zh-Hant": "設定已對齊。",
+    "zh-Hans": "设置已对齐。"
+  },
+  "Effective compaction threshold: ": {
+    "zh-Hant": "實際壓縮門檻：",
+    "zh-Hans": "实际压缩阈值："
+  },
+  "Only DSH settings are updated. Sync does not switch server models, change Strata configuration, or send inference requests. Start a new conversation after syncing.": {
+    "zh-Hant": "同步只更新 DSH 設定，不切換伺服器模型、不修改 Strata 設定，也不發送推論。同步後請開新對話。",
+    "zh-Hans": "同步只更新 DSH 设置，不切换服务器模型、不修改 Strata 设置，也不发送推理请求。同步后请开启新对话。"
+  },
+  "Last sync: ": {
+    "zh-Hant": "最近同步：",
+    "zh-Hans": "最近同步："
+  },
+  "Original settings backup: ": {
+    "zh-Hant": "原設定備份：",
+    "zh-Hans": "原设置备份："
+  },
+  "Strata Sync is not ready.": {
+    "zh-Hant": "Strata Sync 尚未就緒。",
+    "zh-Hans": "Strata Sync 尚未就绪。"
+  },
+  "Language": {
+    "zh-Hant": "語言",
+    "zh-Hans": "语言"
+  },
+  "Server diagnostic: ": {
+    "zh-Hant": "伺服器診斷：",
+    "zh-Hans": "服务器诊断："
+  }
+};
     const labels = {
       contextWindow: 'Context window', outputTokens: 'Response output limit', headroomTokens: 'Compaction headroom',
       summaryMaxTokens: 'Summary output limit', thresholdTokens: 'Compaction threshold', retainTokens: 'Recent conversation retention',
@@ -18,6 +220,10 @@ window.__ModuleLoader__.load({
       SLOTS_OVERRIDE_MODEL_CONTEXT: 'The active engine context differs from the model metadata. Using the active engine context.',
     };
     function SettingsPage({ rpc }) {
+      const [language, setLanguage] = React.useState(() => { try { const saved = window.localStorage?.getItem('strata-sync.language'); return ['en','zh-Hans','zh-Hant'].includes(saved) ? saved : 'en'; } catch { return 'en'; } });
+      const t = (text) => translations[text]?.[language] ?? text;
+      const format = (value) => value == null ? t('Not set') : fmt(value);
+      const diagnostic = (message) => translations[message] ? t(message) : language === 'en' ? message : t('Server diagnostic: ') + message;
       const [state, setState] = React.useState(null), [preview, setPreview] = React.useState(null);
       const [providerId, setProviderId] = React.useState(''), [output, setOutput] = React.useState('');
       const [auto, setAuto] = React.useState(false), [follow, setFollow] = React.useState(true);
@@ -41,40 +247,42 @@ window.__ModuleLoader__.load({
       const dirty = !!state && (providerId !== state.providerId || outputTokens !== state.outputTokens || auto !== state.autoSync || follow !== state.followLoadedModel);
       return h('section', {className:'strata-sync', 'aria-label':'Strata Sync'},
         h('style', null, css),
-        h('header', null, h('h2',null,'Strata Sync'), h('p',{className:'ss-muted'},'Align DSH with the model loaded by Strata Server. The server reports the model and context; this plugin calculates output and compaction budgets. A community plugin, not an official Strata or DeepSeek product.')),
-        !state && !error && h('div',{className:'ss-status',role:'status'},'Loading sync settings...'),
-        state?.busy && h('div',{className:'ss-status',role:'status'},'DSH is running a task. Synchronization will wait until all tasks are idle.'),
-        error && h('div',{className:'ss-status ss-error',role:'alert'},error),
-        notice && h('div',{className:'ss-status',role:'status'},notice),
+        h('label',null,t('Language'),h('select',{'aria-label':'Language',value:language,onChange:e=>{ const next=e.target.value; setLanguage(next); try { window.localStorage?.setItem('strata-sync.language',next); } catch {} }},
+          h('option',{value:'en'},'English'),h('option',{value:'zh-Hans'},'简体中文'),h('option',{value:'zh-Hant'},'繁體中文'))),
+        h('header', null, h('h2',null,'Strata Sync'), h('p',{className:'ss-muted'},t("Align DSH with the model loaded by Strata Server. The server reports the model and context; this plugin calculates output and compaction budgets. A community plugin, not an official Strata or DeepSeek product."))),
+        !state && !error && h('div',{className:'ss-status',role:'status'},t("Loading sync settings...")),
+        state?.busy && h('div',{className:'ss-status',role:'status'},t("DSH is running a task. Synchronization will wait until all tasks are idle.")),
+        error && h('div',{className:'ss-status ss-error',role:'alert'},diagnostic(error)),
+        notice && h('div',{className:'ss-status',role:'status'},t(notice)),
         h('div',{className:'ss-grid'},
-          h('label',null,'Strata provider',h('select',{value:providerId,onChange:e=>{setProviderId(e.target.value);setPreview(null);},disabled:pending||!state},
-            h('option',{value:''},'Choose an existing provider'), ...(state?.providers||[]).map(p=>h('option',{key:p.id,value:p.id},p.id)))),
-          h('label',null,'Response output limit (blank for automatic)',h('input',{type:'number',min:1,step:1,value:output,placeholder:'30% of context, up to 16,384',onChange:e=>{setOutput(e.target.value);setPreview(null);},disabled:pending||!state}))),
-        h('p',{className:'ss-muted'},'Uses the URL and credentials already configured in DSH. API keys are never displayed or copied here.'),
-        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:follow,onChange:e=>{setFollow(e.target.checked);setPreview(null);},disabled:pending||!state}),'Follow the loaded Strata model as the default'),
-        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:auto,onChange:e=>setAuto(e.target.checked),disabled:pending||!state}),'Automatically sync while idle (check every 60 seconds)'),
+          h('label',null,t("Strata provider"),h('select',{value:providerId,onChange:e=>{setProviderId(e.target.value);setPreview(null);},disabled:pending||!state},
+            h('option',{value:''},t("Choose an existing provider")), ...(state?.providers||[]).map(p=>h('option',{key:p.id,value:p.id},p.id)))),
+          h('label',null,t("Response output limit (blank for automatic)"),h('input',{type:'number',min:1,step:1,value:output,placeholder:t("30% of context, up to 16,384"),onChange:e=>{setOutput(e.target.value);setPreview(null);},disabled:pending||!state}))),
+        h('p',{className:'ss-muted'},t("Uses the URL and credentials already configured in DSH. API keys are never displayed or copied here.")),
+        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:follow,onChange:e=>{setFollow(e.target.checked);setPreview(null);},disabled:pending||!state}),t("Follow the loaded Strata model as the default")),
+        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:auto,onChange:e=>setAuto(e.target.checked),disabled:pending||!state}),t("Automatically sync while idle (check every 60 seconds)")),
         h('div',{className:'ss-actions'},
-          h('button',{disabled:pending||!providerId||!valid||!dirty,onClick:()=>action(async()=>{const s=await rpc('configure',{providerId,autoSync:auto,followLoadedModel:follow,outputTokens});setState(s);setPreview(null);setNotice('Sync preferences saved.');})},'Save preferences'),
-          h('button',{disabled:pending||!providerId||dirty||!valid,onClick:()=>action(async()=>{setPreview(await rpc('preview',{providerId}));await refresh();})},pending?'Working...':'Check differences'),
-          h('button',{className:'primary',disabled:pending||dirty||!preview||state?.busy||preview.busy||!preview.changes?.length,onClick:()=>action(async()=>{const r=await rpc('apply',{fingerprint:preview.fingerprint,providerId});setPreview(null);setNotice(r.applied?'Synced and backed up the original settings. Start a new conversation to use the updated compaction policy.':'Settings already match. No changes needed.');await refresh();})},'Back up and sync')),
-        dirty && h('p',{className:'ss-muted'},'Save preferences before checking for differences.'),
+          h('button',{disabled:pending||!providerId||!valid||!dirty,onClick:()=>action(async()=>{const s=await rpc('configure',{providerId,autoSync:auto,followLoadedModel:follow,outputTokens});setState(s);setPreview(null);setNotice('Sync preferences saved.');})},t("Save preferences")),
+          h('button',{disabled:pending||!providerId||dirty||!valid,onClick:()=>action(async()=>{setPreview(await rpc('preview',{providerId}));await refresh();})},pending?t("Working..."):t("Check differences")),
+          h('button',{className:'primary',disabled:pending||dirty||!preview||state?.busy||preview.busy||!preview.changes?.length,onClick:()=>action(async()=>{const r=await rpc('apply',{fingerprint:preview.fingerprint,providerId});setPreview(null);setNotice(r.applied?'Synced and backed up the original settings. Start a new conversation to use the updated compaction policy.':'Settings already match. No changes needed.');await refresh();})},t("Back up and sync"))),
+        dirty && h('p',{className:'ss-muted'},t("Save preferences before checking for differences.")),
         preview && h('div',{className:'ss-card'},
           h('strong',null,'Strata Server'), h('p',null,h('code',null,preview.server?.model?.id)),
           h('div',{className:'ss-grid'},
-            h('div',null,h('strong',null,fmt(preview.budget?.contextWindow)),h('div',{className:'ss-muted'},'Context tokens')),
-            h('div',null,h('strong',null,fmt(preview.budget?.outputTokens)),h('div',{className:'ss-muted'},'Response output limit')),
-            h('div',null,h('strong',null,fmt(preview.budget?.summaryMaxTokens)),h('div',{className:'ss-muted'},'Summary output limit'))),
-          h('p',{className:'ss-muted'},'Context source: ',preview.server?.model?.contextSource||'Server model metadata'),
-          preview.presetIds?.length > 0 && h('p',{className:'ss-muted'},'Affected presets: ',preview.presetIds.join(', '),'. Existing conversations retain their preset revision. Start a new conversation to use the updated compaction budget.'),
-          ...(preview.server?.warnings||[]).map((w,i)=>h('div',{key:i,className:'ss-status ss-error'},typeof w==='string'?(warningText[w]||(w.startsWith('SLOTS_')?'Live slot information is unavailable. Using the model context reported by Strata.':w)):JSON.stringify(w))),
-          h('div',{className:'ss-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',null,'Setting'),h('th',null,'Current'),h('th',null,'After sync'))),
-            h('tbody',null,...(preview.changes||[]).map(c=>h('tr',{key:(c.target||'')+c.field},h('td',null,labels[c.field]||c.field,c.target&&h('div',{className:'ss-muted'},c.target)),h('td',null,fmt(c.before)),h('td',null,fmt(c.after))))))),
-          !preview.changes?.length && h('p',null,'Settings are aligned.'),
-          h('p',null,'Effective compaction threshold: ',fmt(preview.budget?.thresholdTokens),' tokens (',preview.budget?.thresholdPercent?.toFixed(2),'%)'),
-          h('p',{className:'ss-muted'},'Only DSH settings are updated. Sync does not switch server models, change Strata configuration, or send inference requests. Start a new conversation after syncing.')),
-        state?.lastApplied && h('p',{className:'ss-muted'},'Last sync: ',fmt(state.lastApplied?.at||state.lastApplied?.time||state.lastApplied)),
-        state?.lastApplied?.backupPath && h('p',{className:'ss-muted'},'Original settings backup: ',h('code',null,state.lastApplied.backupPath)),
-        state?.lastError && h('div',{className:'ss-status ss-error'},typeof state.lastError==='string'?state.lastError:state.lastError.message));
+            h('div',null,h('strong',null,format(preview.budget?.contextWindow)),h('div',{className:'ss-muted'},t("Context tokens"))),
+            h('div',null,h('strong',null,format(preview.budget?.outputTokens)),h('div',{className:'ss-muted'},t("Response output limit"))),
+            h('div',null,h('strong',null,format(preview.budget?.summaryMaxTokens)),h('div',{className:'ss-muted'},t("Summary output limit")))),
+          h('p',{className:'ss-muted'},t("Context source: "),preview.server?.model?.contextSource||t("Server model metadata")),
+          preview.presetIds?.length > 0 && h('p',{className:'ss-muted'},t("Affected presets: "),preview.presetIds.join(', '),t(". Existing conversations retain their preset revision. Start a new conversation to use the updated compaction budget.")),
+          ...(preview.server?.warnings||[]).map((w,i)=>h('div',{key:i,className:'ss-status ss-error'},typeof w==='string'?(t(warningText[w])||(w.startsWith('SLOTS_')?t("Live slot information is unavailable. Using the model context reported by Strata."):w)):JSON.stringify(w))),
+          h('div',{className:'ss-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',null,t("Setting")),h('th',null,t("Current")),h('th',null,t("After sync")))),
+            h('tbody',null,...(preview.changes||[]).map(c=>h('tr',{key:(c.target||'')+c.field},h('td',null,t(labels[c.field]||c.field),c.target&&h('div',{className:'ss-muted'},c.target)),h('td',null,format(c.before)),h('td',null,format(c.after))))))),
+          !preview.changes?.length && h('p',null,t("Settings are aligned.")),
+          h('p',null,t("Effective compaction threshold: "),format(preview.budget?.thresholdTokens),' tokens (',preview.budget?.thresholdPercent?.toFixed(2),'%)'),
+          h('p',{className:'ss-muted'},t("Only DSH settings are updated. Sync does not switch server models, change Strata configuration, or send inference requests. Start a new conversation after syncing."))),
+        state?.lastApplied && h('p',{className:'ss-muted'},t("Last sync: "),format(state.lastApplied?.at||state.lastApplied?.time||state.lastApplied)),
+        state?.lastApplied?.backupPath && h('p',{className:'ss-muted'},t("Original settings backup: "),h('code',null,state.lastApplied.backupPath)),
+        state?.lastError && h('div',{className:'ss-status ss-error'},diagnostic(typeof state.lastError==='string'?state.lastError:state.lastError.message)));
     }
     function apply(ctx) {
       const rpc = async (endpoint,payload) => {

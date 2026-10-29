@@ -1,0 +1,92 @@
+# DSH Strata Sync
+
+[English](README.md) · [简体中文](README.zh-CN.md) · **繁體中文**
+
+讓 **DeepSeek Harness（DSH）** 對齊 **Strata Server** 實際載入的模型，並在 DSH **設定 → Strata Sync** 中提供操作介面。這是社群外掛，非 DeepSeek 或 Strata 官方產品。
+
+UI 支援 English、简体中文、繁體中文。在外掛頁面上方的「語言」選單切換；預設英文，選擇儲存在目前瀏覽器的本機儲存空間，不修改 DSH 全域語言或模型設定。伺服器傳回的未知診斷訊息保留原文，以利排查。
+
+![繁體中文設定介面](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-zh-TW.jpg?v=0.3.0)
+
+## 功能
+
+- 讀取 `/v1/models` 與可用的 `/slots`，確認模型 ID 和引擎實際上下文，不從模型名稱猜測。
+- 更新選定 DSH 模型的上下文、輸出上限，以及已啟用 Agent 範本中的原生 `compaction-basic` 策略；預覽會列出受影響的範本。
+- 區分伺服器回報值與外掛計算的用戶端預算，可自訂輸出上限、選擇讓預設模型跟隨伺服器。
+- 自動同步預設關閉；啟用後每 60 秒檢查，僅在所有 DSH 工作閒置時套用。
+- 套用前重新確認伺服器、拒絕過期預覽、備份設定；後續寫入失敗時回復已完成的變更。
+- 沿用 DSH 現有認證，不在頁面或診斷中顯示金鑰，不跟隨 HTTP 重新導向。
+
+**同步後請開新對話。** 既有對話保留原模型路由與 Agent 範本版本；外掛不重寫既有對話、不重啟 DSH，也不向模型發送推論請求。
+
+## 安裝與使用
+
+需要 Node.js 22 或更新版本：
+
+```sh
+git clone https://github.com/ethan741205/dsh-strata-sync.git
+cd dsh-strata-sync
+npm ci
+npm test
+npm pack
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.3.0.tgz
+```
+
+執行最後一行前，先完成工作並完全結束 DSH Desktop，再使用官方 CLI 安裝，完成後重新開啟。在其他目錄執行時，請使用套件的絕對路徑。首次安裝會自動選取 bundle；已安裝但停用的 bundle 需在外掛管理員重新啟用。
+
+先在 DSH 模型設定建立 Strata 供應者，再開啟 **設定 → Strata Sync**：
+
+1. 選擇語言與既有 Strata 供應者，按「儲存偏好」。
+2. 按「檢查差異」，預覽目前載入模型與建議設定。
+3. DSH 閒置時按「備份並同步」。
+4. 如需自動同步，勾選「閒置時自動同步」並儲存。
+5. 開啟新對話，使用更新後的 Agent 範本。
+
+不需要把 API key 複製到此外掛；認證問題請在 DSH 模型設定處理。
+
+## 相容性
+
+以 **DSH Desktop 0.2.1-rc.3** 開發及驗證。需要標準桌面服務 `configEditor`、`connection`、`agents`、`credentials`、`llm-pi-ai`，以及含 `compaction-basic` 的已啟用 Agent 範本，或作用中的舊式全域壓縮外掛。僅支援 API key 或無認證的 `openai-completions` 供應者。
+
+無法確認上下文、未載入模型、多個模型無法判定、slot 容量互相衝突時，會拒絕同步。目前 UI 跟隨單一已載入模型，不提供多個同時載入模型的選擇器。
+
+輪詢排程含 DSH 0.2.1-rc.3 的 HMR `executing.exit` 相容處理，避免計時器保留已完成的設定交易；所有寫入仍透過 ConfigEditor 的正常佇列。升級 DSH 後需重新驗證此相容處理。
+
+## 預算策略
+
+Strata 提供模型與上下文資訊，**不提供 DSH 壓縮策略**。下列是此外掛的用戶端策略，配合 DSH 0.2.1-rc.3 原生 4,096-token 上下文安全餘裕：
+
+```text
+一般輸出 = min(16384, floor(上下文 × 0.30))，除非另外指定
+壓縮餘裕 = 4096
+摘要 maxTokens = 4096
+thresholdRatio = 0.8
+retainRatio = 0.16
+實際壓縮門檻 = floor(min(上下文 × 0.8, 上下文 − 一般輸出 − 4096))
+近期對話保留量 = floor((上下文 − 一般輸出) × 0.16)
+```
+
+| 上下文 | 一般輸出 | 摘要輸出 | 壓縮餘裕 | 壓縮門檻 | 近期保留量 |
+|---|---:|---:|---:|---:|---:|
+| 32,768 | 9,830 | 4,096 | 4,096 | 18,842（57.50%） | 3,670 |
+| 65,536 | 16,384 | 4,096 | 4,096 | 45,056（68.75%） | 7,864 |
+
+自訂輸出上限必須保留有效的正數壓縮預算，且近期保留量須低於門檻。不支援小於 8,192 的上下文。保留模型推理選項、認證、其他供應者與其他模型策略；選定路由的保留量統一為 `retainRatio: 0.16`，以免沿用不相容的絕對值。
+
+此策略可修正 32K 路由沿用原生 `headroomTokens: 65536` 等不適當預算，但**不能保證模型每次都能在輸出上限內完成回答或摘要**，推理也會消耗輸出 tokens。不讀取或修改 Strata 的 `fit_max_tokens`；伺服器設為 `false` 也不會停用 DSH 自身的輸出限制。
+
+## 備份與復原
+
+每次套用前，將目前 `cordis.patch.yml` 備份至 profile 旁的 `backups/strata-sync/`，UI 會顯示路徑。備份可能包含私人供應者設定，請留在本機，不要公開。
+
+ConfigEditor 負責個別原子寫入與熱載入；跨多項設定採補償回復，並非資料庫交易。若同時有外部修改，可能需要依備份手動復原。關閉自動同步可停止後續輪詢套用；移除外掛**不會撤銷已套用的模型與預算**。需要還原時，請先關閉 DSH 再恢復指定備份。
+
+## 開發與版本
+
+0.3.0 新增三語 UI、語言選擇記憶與中文 README；0.2.0 將 UI 移入原生設定。同步策略保持不變。
+
+`src/plugin.mjs` 為宿主外掛，`src/client.js` 為原生 ModuleLoader/React UI，`src/core.mjs` 負責資訊讀取與純預算計算。執行 `npm test`、`npm run build`、`npm pack --dry-run` 驗證。套件只包含原創外掛程式，不包含私人應用程式原始碼、認證或對話。
+
+測試使用模擬服務，不產生模型回答。驗證範圍與限制見 [VALIDATION](docs/VALIDATION.md)。參考：[DSH 壓縮文件](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md)、[Strata](https://github.com/Niko1221/Strata)。
+
+MIT 授權。

@@ -1,16 +1,55 @@
 {
   "name": "@ethan741205/dsh-strata-sync",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Native DSH settings UI for synchronizing Strata Server models, context and compaction budgets",
   "type": "module",
   "main": "dist/index.js",
-  "exports": {".": "./dist/index.js", "./client": "./dist/client.js", "./package.json": "./package.json", "./cordis.patch.yml": "./cordis.patch.yml"},
-  "files": ["dist", "cordis.patch.yml", "README.md", "LICENSE"],
-  "scripts": {"build": "node scripts/build.mjs", "test": "node --test test/*.test.mjs", "prepack": "npm run build"},
-  "engines": {"node": ">=22"},
-  "dsh": {"bundle": {"patch": "./cordis.patch.yml"}, "client": {"inject": ["@deepseek-ai/dsh-client-connection", "@deepseek-ai/dsh-client-ui-settings"], "platform": "web"}},
-  "peerDependencies": {"@deepseek-ai/cordis": "~4.0.5", "@deepseek-ai/schemastery": "~3.18.5"},
-  "devDependencies": {"react": "18.3.1", "react-dom": "18.3.1", "jsdom": "26.1.0"},
-  "repository": {"type": "git", "url": "https://github.com/ethan741205/dsh-strata-sync.git"},
+  "exports": {
+    ".": "./dist/index.js",
+    "./client": "./dist/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh-TW.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5",
+    "@deepseek-ai/schemastery": "~3.18.5"
+  },
+  "devDependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "jsdom": "26.1.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ethan741205/dsh-strata-sync.git"
+  },
   "license": "MIT"
 }

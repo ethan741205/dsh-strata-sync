@@ -2,7 +2,17 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
-## Version scope
+## Multilingual release 0.3.0
+
+- All 38 automated tests pass, including Chinese preview labels and warnings, translated apply notices, local language persistence, invalid-language fallback and unchanged RPC write behavior on language switching.
+- Packed and installed 0.3.0 in the isolated DSH Desktop 0.2.1-rc.3 web profile.
+- Verified English, Traditional Chinese and Simplified Chinese in Settings → Strata Sync, including metadata preview and budget labels.
+- Verified the selected language remains after leaving and reopening the Settings section.
+- Captured the three native screenshots linked from the README editions.
+- The npm package includes all three README editions. Unknown backend diagnostics deliberately retain their original text.
+- No production DSH or Strata settings were changed; the native check only read metadata.
+
+## Previous version scope
 
 Version **0.2.0** moves the English interface to **Settings → Strata Sync**. Its Settings navigation, preferences, preview and synchronization were verified in the native host. The synchronization backend is unchanged from 0.1.0; the earlier full automatic-polling validation is retained below.
 
