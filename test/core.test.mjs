@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeBaseURL, planBudget, discoverStrata } from '../src/core.mjs';
+import { normalizeBaseURL, planBudget, discoverStrata, planModelCapabilities } from '../src/core.mjs';
 
 const loaded = (id = 'qwen', n_ctx = 32768) => ({ id, status: 'loaded', meta: { n_ctx } });
 const json = data => new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } });
@@ -39,7 +39,7 @@ test('discovery only reads metadata and sends credentials without returning them
     calls.push({ url, options });
     return stub([loaded()])(url);
   } });
-  assert.deepEqual(calls.map(call => call.url), ['https://strata.test/v1/models', 'https://strata.test/slots']);
+  assert.deepEqual(calls.map(call => call.url), ['https://strata.test/v1/models', 'https://strata.test/slots', 'https://strata.test/props?model=qwen']);
   for (const { options } of calls) {
     assert.equal(options.method, 'GET');
     assert.equal(options.redirect, 'error');
@@ -67,7 +67,7 @@ test('Strata object status and null slot model are supported', async () => {
 test('optional slots failures fall back to explicit model metadata', async () => {
   const result = await discoverStrata('https://strata.test', '', { fetch: async url => url.endsWith('/models') ? json({ data: [loaded()] }) : new Response('private error', { status: 404 }) });
   assert.equal(result.model.contextSource, 'models.meta.n_ctx');
-  assert.deepEqual(result.warnings, ['SLOTS_HTTP_ERROR']);
+  assert.ok(result.warnings.includes('SLOTS_HTTP_ERROR'));
 });
 
 test('missing, unloaded, ambiguous, and duplicate models cannot silently sync', async () => {

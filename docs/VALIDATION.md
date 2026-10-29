@@ -2,6 +2,16 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## Capability synchronization 0.4.0
+
+- All 56 automated tests pass. New checks cover verified template profiles, exact native efforts, unknown/malformed inputs, unverified reasoning preservation, conflicting provider defaults, localized warnings, stale capabilities, rollback and preservation of unrelated compatibility fields.
+- Eight SDK wire tests use the public pi-ai 1.1.0 SDK (matching the installed DSH package version) with mocked fetch responses. Qwen off/low/medium/xhigh and DeepSeek off/low/high/max produce the expected thinking booleans and effort values. No inference endpoint is contacted.
+- Queried the real Strata server's model and props metadata read-only: 32K Qwen with text/image input and the reviewed Qwen template. Inspected installed DeepSeek and Huihui tokenizer templates without loading them. Raw templates stay outside the repository.
+- Installed the plugin into the isolated native DSH Desktop 0.2.1-rc.3 test profile. The fixture served the reviewed Qwen and DeepSeek templates as metadata. Preview/apply succeeded for each, retained 32K/9,830 budgets, saved profile backups, and the second preview showed no changes.
+- Opened DSH's native Models editor and confirmed Qwen's context, output, text/image input and off/low/medium/xhigh entries. The DeepSeek test profile saved off/low/high/max.
+- Unknown templates are covered by preservation tests; the plugin does not infer supported efforts from a model name or claim all future templates are compatible.
+- Model inference quality, physical vision encoding and the production DSH profile were not changed or tested.
+
 ## Multilingual release 0.3.0
 
 - All 38 automated tests pass, including Chinese preview labels and warnings, translated apply notices, local language persistence, invalid-language fallback and unchanged RPC write behavior on language switching.

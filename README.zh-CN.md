@@ -6,9 +6,23 @@
 
 UI 支持 English、简体中文、繁體中文。在插件页面上方的“语言”菜单切换；默认英文，选择保存在当前浏览器的本地存储中，不修改 DSH 全局语言或模型设置。服务器返回的未知诊断消息保留原文，方便排查。
 
-![简体中文设置界面](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-zh-CN.jpg?v=0.3.0)
+![简体中文设置界面](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-zh-CN.jpg?v=0.4.0)
 
 ## 功能
+
+### 模型能力自动同步（0.4.0）
+
+预览新增“输入类型”“推理等级”和“推理请求映射”，与 token 预算共用备份、回滚及空闲时才应用的保护。
+
+- 输入类型按服务器明确报告的 `architecture.input_modalities` 设置为文本或文本＋图片；缺少信息或格式不支持时保留原值。
+- 推理等级从 `/props?model=...` 核对 Strata 身份、模型身份及已审查的对话模板指纹，不只凭名称猜测。
+- 已验证的 Qwen3.8-Flash-Next：**off／low／medium／xhigh**；DeepSeek-V4.1-Flash：**off／low／high／max**。包含已核对的 Huihui 版本，以模板而非量化名称判定。
+- 使用 DSH 原生请求映射，同时设置是否思考及推理等级。模板未知或无法获取 props 时，保留原推理设置并显示原因。
+- 不修改提供方默认等级或当前对话选择。提供方默认值与已验证选项冲突时，跳过推理同步并提示。同步后请开启新对话。
+
+详见[能力验证与映射表](docs/CAPABILITIES.md)。不新增其他插件、不修改 Strata 设置。
+
+### 已有同步功能
 
 - 读取 `/v1/models` 和可用的 `/slots`，确认模型 ID 和引擎实际上下文，不从模型名称猜测。
 - 更新选定 DSH 模型的上下文、输出上限，以及已启用 Agent 预设中的原生 `compaction-basic` 策略；预览会列出受影响的预设。
@@ -29,7 +43,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.3.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.4.0.tgz
 ```
 
 执行最后一行前，先完成任务并完全退出 DSH Desktop，再使用官方 CLI 安装，完成后重新打开。在其他目录执行时，请使用安装包的绝对路径。首次安装会自动选中 bundle；已安装但禁用的 bundle 需在插件管理器重新启用。
@@ -71,7 +85,7 @@ retainRatio = 0.16
 | 32,768 | 9,830 | 4,096 | 4,096 | 18,842（57.50%） | 3,670 |
 | 65,536 | 16,384 | 4,096 | 4,096 | 45,056（68.75%） | 7,864 |
 
-自定义输出上限必须留下有效的正数压缩预算，且近期保留量须低于阈值。不支持小于 8,192 的上下文。保留模型推理选项、认证、其他提供方与其他模型策略；选定路由的保留量统一为 `retainRatio: 0.16`，避免沿用不兼容的绝对值。
+自定义输出上限必须留下有效的正数压缩预算，且近期保留量须低于阈值。不支持小于 8,192 的上下文。推理选项仅在确认支持时同步；保留认证、其他提供方与其他模型策略；选定路由的保留量统一为 `retainRatio: 0.16`，避免沿用不兼容的绝对值。
 
 此策略可修正 32K 路由沿用原生 `headroomTokens: 65536` 等不适当预算，但**不能保证模型每次都能在输出上限内完成回答或摘要**，推理也会消耗输出 tokens。不读取或修改 Strata 的 `fit_max_tokens`；服务器设为 `false` 也不会禁用 DSH 自身的输出限制。
 

@@ -5,6 +5,53 @@ window.__ModuleLoader__.load({
     const React = require('react');
     const h = React.createElement;
     const translations = {
+  "Existing request mapping": { "zh-Hant": "既有請求對應", "zh-Hans": "已有请求映射" },
+
+  "Input types": {
+    "zh-Hant": "輸入類型",
+    "zh-Hans": "输入类型"
+  },
+  "Reasoning levels": {
+    "zh-Hant": "推理等級",
+    "zh-Hans": "推理等级"
+  },
+  "Reasoning request mapping": {
+    "zh-Hant": "推理請求對應",
+    "zh-Hans": "推理请求映射"
+  },
+  "Unconfirmed — keep current setting": {
+    "zh-Hant": "無法確認 — 保留原設定",
+    "zh-Hans": "无法确认 — 保留原设置"
+  },
+  "Text": {
+    "zh-Hant": "文字",
+    "zh-Hans": "文本"
+  },
+  "Text + image": {
+    "zh-Hant": "文字＋圖片",
+    "zh-Hans": "文本＋图片"
+  },
+  "Input types are missing or unsupported in server metadata. Existing input settings are preserved.": {
+    "zh-Hant": "伺服器未提供可確認的輸入類型，保留原輸入設定。",
+    "zh-Hans": "服务器未提供可确认的输入类型，保留原输入设置。"
+  },
+  "Reasoning support could not be verified against a reviewed Strata chat template. Existing reasoning settings are preserved.": {
+    "zh-Hant": "無法以已核對的 Strata 對話範本確認推理選項，保留原推理設定。",
+    "zh-Hans": "无法用已核对的 Strata 对话模板确认推理选项，保留原推理设置。"
+  },
+  "The provider default reasoning level is not supported by the verified template. Reasoning settings are preserved; resolve the default in Models first.": {
+    "zh-Hant": "供應者預設推理等級不在已驗證範本支援範圍，保留原推理設定；請先至模型設定調整預設值。",
+    "zh-Hans": "提供方默认推理等级不在已验证模板支持范围，保留原推理设置；请先到模型设置调整默认值。"
+  },
+  "Verified template: ": {
+    "zh-Hant": "已驗證範本：",
+    "zh-Hans": "已验证模板："
+  },
+  "Only verified capabilities are synchronized. Unknown fields keep their existing values. Reasoning choices do not change the selected effort.": {
+    "zh-Hant": "只同步已確認的能力；未知欄位保留原值。更新推理選項不會改動目前選擇的等級。",
+    "zh-Hans": "只同步已确认的能力；未知字段保留原值。更新推理选项不会改动当前选择的等级。"
+  }
+,
   "Context window": {
     "zh-Hant": "上下文視窗",
     "zh-Hans": "上下文窗口"
@@ -207,7 +254,7 @@ window.__ModuleLoader__.load({
   }
 };
     const labels = {
-      contextWindow: 'Context window', outputTokens: 'Response output limit', headroomTokens: 'Compaction headroom',
+      input: 'Input types', reasoningEfforts: 'Reasoning levels', compat: 'Reasoning request mapping', contextWindow: 'Context window', outputTokens: 'Response output limit', headroomTokens: 'Compaction headroom',
       summaryMaxTokens: 'Summary output limit', thresholdTokens: 'Compaction threshold', retainTokens: 'Recent conversation retention',
       model: 'Model', modelId: 'Model', defaultModel: 'Default model',
       thresholdRatio: 'Compaction ratio ceiling', retainRatio: 'Recent conversation retention ratio',
@@ -215,6 +262,9 @@ window.__ModuleLoader__.load({
     const css = `.strata-sync{max-width:880px;color:inherit;font:inherit;line-height:1.6}.strata-sync *{box-sizing:border-box}.strata-sync header{border-bottom:1px solid #8884;padding-bottom:16px;margin-bottom:20px}.strata-sync h2{margin:0;font-size:22px}.strata-sync .ss-muted{opacity:.72;font-size:13px}.strata-sync .ss-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.strata-sync label{display:flex;flex-direction:column;gap:5px;font-size:14px}.strata-sync select,.strata-sync input[type=number]{padding:9px;border:1px solid #8886;border-radius:7px;background:transparent;color:inherit;width:100%}.strata-sync option{color:#17252b;background:#fff}.strata-sync button{padding:9px 15px;border:1px solid #8885;border-radius:7px;background:transparent;color:inherit;cursor:pointer}.strata-sync button.primary{background:#126c65;border-color:#126c65;color:#fff}.strata-sync button:disabled{opacity:.45;cursor:default}.strata-sync .ss-actions{display:flex;gap:9px;flex-wrap:wrap;margin:18px 0}.strata-sync .ss-check{display:flex;flex-direction:row;align-items:center;margin-top:13px}.strata-sync .ss-card{padding:16px;border:1px solid #8884;border-radius:9px;margin:16px 0}.strata-sync .ss-status{padding:10px 13px;border-left:3px solid #21867b;background:#21867b12;margin:13px 0;overflow-wrap:anywhere}.strata-sync .ss-error{border-color:#ce7140;background:#ce714012}.strata-sync table{width:100%;border-collapse:collapse;font-size:14px}.strata-sync td,.strata-sync th{padding:9px 8px;text-align:left;border-bottom:1px solid #8883;overflow-wrap:anywhere}.strata-sync code{font-size:12px;overflow-wrap:anywhere}.strata-sync .ss-scroll{overflow-x:auto}`;
     const fmt = (v) => v == null ? 'Not set' : typeof v === 'number' ? v.toLocaleString('en-US') : typeof v === 'object' ? JSON.stringify(v) : String(v);
     const warningText = {
+INPUT_UNCONFIRMED: 'Input types are missing or unsupported in server metadata. Existing input settings are preserved.',
+REASONING_UNCONFIRMED: 'Reasoning support could not be verified against a reviewed Strata chat template. Existing reasoning settings are preserved.',
+REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not supported by the verified template. Reasoning settings are preserved; resolve the default in Models first.',
       DSH_AUTO_COMPACTION_DISABLED: 'Automatic compaction is disabled in an affected Agent preset. Sync preserves that choice.',
       SLOTS_CONTEXT_UNAVAILABLE: 'Live slots do not report a context size. Using the model context reported by Strata.',
       SLOTS_OVERRIDE_MODEL_CONTEXT: 'The active engine context differs from the model metadata. Using the active engine context.',
@@ -222,7 +272,7 @@ window.__ModuleLoader__.load({
     function SettingsPage({ rpc }) {
       const [language, setLanguage] = React.useState(() => { try { const saved = window.localStorage?.getItem('strata-sync.language'); return ['en','zh-Hans','zh-Hant'].includes(saved) ? saved : 'en'; } catch { return 'en'; } });
       const t = (text) => translations[text]?.[language] ?? text;
-      const format = (value) => value == null ? t('Not set') : fmt(value);
+      const format = (value) => value == null ? t('Not set') : typeof value === 'string' ? t(value) : fmt(value);
       const diagnostic = (message) => translations[message] ? t(message) : language === 'en' ? message : t('Server diagnostic: ') + message;
       const [state, setState] = React.useState(null), [preview, setPreview] = React.useState(null);
       const [providerId, setProviderId] = React.useState(''), [output, setOutput] = React.useState('');
@@ -272,6 +322,10 @@ window.__ModuleLoader__.load({
             h('div',null,h('strong',null,format(preview.budget?.contextWindow)),h('div',{className:'ss-muted'},t("Context tokens"))),
             h('div',null,h('strong',null,format(preview.budget?.outputTokens)),h('div',{className:'ss-muted'},t("Response output limit"))),
             h('div',null,h('strong',null,format(preview.budget?.summaryMaxTokens)),h('div',{className:'ss-muted'},t("Summary output limit")))),
+          h('p',null,t('Input types'),': ',preview.server?.model?.capabilities?.input ? t(preview.server.model.capabilities.input.includes('image')?'Text + image':'Text') : t('Unconfirmed — keep current setting')),
+          h('p',null,t('Reasoning levels'),': ',preview.capabilityEdits?.reasoningEfforts ? Object.keys(preview.capabilityEdits.reasoningEfforts).join(' / ') : t('Unconfirmed — keep current setting')),
+          preview.capabilityEdits?.reasoningEfforts && h('p',{className:'ss-muted'},t('Verified template: '),preview.server.model.capabilities.reasoning.family),
+          h('p',{className:'ss-muted'},t('Only verified capabilities are synchronized. Unknown fields keep their existing values. Reasoning choices do not change the selected effort.')),
           h('p',{className:'ss-muted'},t("Context source: "),preview.server?.model?.contextSource||t("Server model metadata")),
           preview.presetIds?.length > 0 && h('p',{className:'ss-muted'},t("Affected presets: "),preview.presetIds.join(', '),t(". Existing conversations retain their preset revision. Start a new conversation to use the updated compaction budget.")),
           ...(preview.server?.warnings||[]).map((w,i)=>h('div',{key:i,className:'ss-status ss-error'},typeof w==='string'?(t(warningText[w])||(w.startsWith('SLOTS_')?t("Live slot information is unavailable. Using the model context reported by Strata."):w)):JSON.stringify(w))),

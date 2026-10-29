@@ -20,6 +20,25 @@ const clone = (value) => structuredClone(value);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+export function capabilityChanges(capabilities, route, configured = {}) {
+  const edits = {}, warnings = [];
+  if (capabilities.input) edits.input = capabilities.input;
+  if (capabilities.reasoning) {
+    const supported = capabilities.reasoning.efforts;
+    if (route.reasoning !== undefined && !own(supported, route.reasoning)) warnings.push('REASONING_DEFAULT_CONFLICT');
+    else {
+      edits.reasoningEfforts = supported;
+      edits.compat = clone(capabilities.reasoning.compat);
+    }
+  }
+  return { edits, warnings };
+}
+export function mergeCapabilityEdits(model, route, edits) {
+  const result = clone(edits);
+  if (edits.compat) result.compat = { ...model.compat, ...edits.compat,
+    chatTemplateKwargs: { ...route.compat?.chatTemplateKwargs, ...model.compat?.chatTemplateKwargs, ...edits.compat.chatTemplateKwargs } };
+  return result;
+}
 function refuse(code, message) { const error = new Error(message); error.code = code; throw error; }
 function payload(value, keys = []) {
   if (!object(value) || Object.keys(value).some((key) => !keys.includes(key))) refuse('invalid-request', 'Invalid Strata Sync request.');
@@ -146,6 +165,9 @@ export function apply(ctx, initialConfig) {
     ensureOpen();
     const budget = planBudget(discovered.model.contextWindow, { outputTokens });
     const configured = (route.models ?? []).find((model) => model.id === discovered.model.id);
+    const capabilities = discovered.model.capabilities;
+    const { edits: capabilityEdits, warnings: capabilityWarnings } = capabilityChanges(capabilities, route, configured);
+    discovered.warnings.push(...capabilityWarnings);
     const compactions = before.owners.flatMap((owner) => owner.targets.map((target) => {
       const base = target.config;
       const policy = (base.modelPolicies ?? []).find((row) => row.provider === providerId && row.model === discovered.model.id);
@@ -164,6 +186,14 @@ export function apply(ctx, initialConfig) {
       contextWindow: budget.contextWindow, outputTokens: budget.outputTokens,
     };
     const changes = Object.entries(desired).filter(([field, after]) => current[field] !== after).map(([field, after]) => ({ field, before: current[field] ?? null, after }));
+    for (const [field, after] of Object.entries(capabilityEdits)) {
+      let previous = configured?.[field];
+      if (field === 'compat') previous = { thinkingFormat: configured?.compat?.thinkingFormat,
+        supportsReasoningEffort: configured?.compat?.supportsReasoningEffort,
+        chatTemplateKwargs: Object.fromEntries(Object.keys(after.chatTemplateKwargs).map(key=>[key,configured?.compat?.chatTemplateKwargs?.[key]])) };
+      if (JSON.stringify(previous) !== JSON.stringify(after)) changes.push({ field,
+        before: field === 'compat' ? 'Existing request mapping' : previous ?? null, after });
+    }
     const compactionDesired = { headroomTokens: budget.headroomTokens, summaryMaxTokens: budget.summaryMaxTokens,
       thresholdRatio: budget.thresholdRatio, retainRatio: budget.retainRatio, retainTokens: null };
     for (const state of compactions) for (const [field, after] of Object.entries(compactionDesired)) {
@@ -178,7 +208,7 @@ export function apply(ctx, initialConfig) {
     const fingerprint = hash({ providerId, model: discovered.model, budget, settings: publicSettings(), profile: before.llm, compaction: before.owners, defaults: before.defaults });
     const warnings = [...discovered.warnings ?? [], ...(before.owners.some((owner) => owner.targets.some((target) => target.config.auto === false)) ? ['DSH_AUTO_COMPACTION_DISABLED'] : [])];
     const presetIds = before.owners.flatMap((owner) => owner.presetId ? [owner.presetId] : []);
-    const view = { providerId, server: { baseURL: discovered.baseURL, model: discovered.model, warnings }, budget, current, compactions,
+    const view = { providerId, server: { baseURL: discovered.baseURL, model: discovered.model, warnings }, budget, current, compactions, capabilityEdits,
       presetIds, needsNewConversation: presetIds.length > 0, changes, fingerprint, busy: busy() };
     lastPreview = view;
     lastError = null;
@@ -220,8 +250,9 @@ export function apply(ctx, initialConfig) {
       const route = llmNext.providers[view.providerId];
       route.models ??= [];
       let model = route.models.find((row) => row.id === modelId);
-      if (!model) { model = { id: modelId, name: view.server.model.name ?? modelId, input: ['text'] }; route.models.push(model); }
+      if (!model) { model = { id: modelId, name: view.server.model.name ?? modelId }; route.models.push(model); }
       Object.assign(model, { contextWindow: view.budget.contextWindow, maxTokens: view.budget.outputTokens });
+      Object.assign(model, mergeCapabilityEdits(model, route, view.capabilityEdits));
       const edits = [
         [before.llmEntry.options.name, before.llmEntry.options.id, before.llm, llmNext],
         ...before.owners.map((owner) => {

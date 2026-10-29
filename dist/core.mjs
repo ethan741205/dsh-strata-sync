@@ -1,4 +1,5 @@
 /** Read-only Strata discovery and client-side token budgeting. No inference APIs. */
+import { createHash } from 'node:crypto';
 export class StrataSyncError extends Error {
   constructor(code, message) {
     super(message);
@@ -12,6 +13,36 @@ const MAX_RESPONSE_BYTES = 256 * 1024;
 const MAX_CONTEXT = 16 * 1024 * 1024;
 const isContext = value => Number.isSafeInteger(value) && value > 0 && value <= MAX_CONTEXT;
 const safeLabel = value => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/u.test(value);
+
+// Reviewed template bytes, not a model-name heuristic. See docs/CAPABILITIES.md.
+const TEMPLATE_PROFILES = {
+  '12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce': {
+    family: 'Qwen3.8-Flash-Next', efforts: { off: 'none', low: 'low', medium: 'medium', xhigh: 'xhigh' },
+  },
+  '6f9bd1f87d9dad376b4c79683934b4254396d826ae514ab0244efa904ce1d1a4': {
+    family: 'DeepSeek-V4.1-Flash', efforts: { off: 'none', low: 'low', high: 'high', max: 'max' },
+  },
+};
+
+export function planModelCapabilities(modalities, evidence = {}) {
+  const validInput = Array.isArray(modalities) && modalities.length > 0 && modalities.length <= 2
+    && modalities.includes('text') && new Set(modalities).size === modalities.length
+    && modalities.every(value => value === 'text' || value === 'image');
+  const input = validInput ? ['text', ...(modalities.includes('image') ? ['image'] : [])] : null;
+  const profile = evidence.verifiedStrata && evidence.modelMatched ? TEMPLATE_PROFILES[evidence.templateHash] : null;
+  return {
+    input, inputSource: input ? 'models.architecture.input_modalities' : null,
+    reasoning: profile ? { family: profile.family, templateHash: evidence.templateHash,
+      efforts: { ...profile.efforts },
+      // Native pi-ai dispatch: enable thinking AND select effort. Off sends false,
+      // never just omits a field and accidentally inherits server thinking defaults.
+      compat: { thinkingFormat: 'chat-template', supportsReasoningEffort: false,
+        chatTemplateKwargs: { thinking: { $var: 'thinking.enabled' }, enable_thinking: { $var: 'thinking.enabled' },
+          reasoning_effort: { $var: 'thinking.effort', omitWhenOff: true } } },
+    } : null,
+    warnings: [...(!input ? ['INPUT_UNCONFIRMED'] : []), ...(!profile ? ['REASONING_UNCONFIRMED'] : [])],
+  };
+}
 
 /** Accept either the server root or an OpenAI-compatible /v1 base URL. */
 export function normalizeBaseURL(value) {
@@ -109,6 +140,7 @@ function modelRecord(row) {
     name: safeLabel(row.name) ? row.name : row.id,
     status: (row.status === 'loaded' || row.status?.value === 'loaded') ? 'loaded' : 'not-loaded',
     contextWindow: isContext(row.meta?.n_ctx) ? row.meta.n_ctx : null,
+    modalities: row.architecture?.input_modalities,
   };
 }
 
@@ -176,9 +208,21 @@ export async function discoverStrata(baseURL, apiKey = '', options = {}) {
   if (liveContext !== null && selected.contextWindow !== null && liveContext !== selected.contextWindow) {
     warnings.push('SLOTS_OVERRIDE_MODEL_CONTEXT');
   }
+  let evidence = {};
+  try {
+    const props = await readJSON(`${normalized.slice(0, -3)}/props?model=${encodeURIComponent(selected.id)}`, apiKey, request);
+    evidence = {
+      verifiedStrata: typeof props.build_info === 'string' && /^Strata \d+\.\d+(?:\.\d+)?(?:\b|$)/u.test(props.build_info),
+      modelMatched: props.model_alias === selected.id,
+      templateHash: typeof props.chat_template === 'string'
+        ? createHash('sha256').update(props.chat_template.replace(/\r\n/g, '\n')).digest('hex') : null,
+    };
+  } catch { /* Optional metadata: preserve reasoning on any failure. */ }
+  const capabilities = planModelCapabilities(selected.modalities, evidence);
+  warnings.push(...capabilities.warnings);
   return {
     baseURL: normalized,
-    model: { id: selected.id, name: selected.name, contextWindow, contextSource: liveContext !== null ? 'slots.n_ctx' : 'models.meta.n_ctx' },
-    models, warnings,
+    model: { id: selected.id, name: selected.name, contextWindow, contextSource: liveContext !== null ? 'slots.n_ctx' : 'models.meta.n_ctx', capabilities },
+    models: models.map(({modalities, ...model}) => model), warnings,
   };
 }

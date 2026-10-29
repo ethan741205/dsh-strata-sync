@@ -6,9 +6,23 @@ A community plugin that aligns **DeepSeek Harness (DSH)** with the model actuall
 
 Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization while DSH is idle. The interface and README are available in English, Simplified Chinese and Traditional Chinese. Choose a language at the top of the plugin page. English is the default; the selection is stored in the current browser only and does not change DSH’s global language or model settings. Unknown backend diagnostics retain their original text for troubleshooting.
 
-![Native DSH Strata Sync settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview.jpg?v=0.3.0)
+![Native DSH Strata Sync settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview.jpg?v=0.4.0)
 
 ## What it does
+
+### Automatic model capabilities (0.4.0)
+
+The preview includes **Input types**, **Reasoning levels**, and **Reasoning request mapping**, with the same backup, rollback and idle-only safeguards as token budgets.
+
+- Input types follow the server's explicit `architecture.input_modalities`: text, or text plus image. Unknown or unsupported values preserve the existing field.
+- Reasoning requires matching Strata identity, model identity and a reviewed chat-template fingerprint from `/props?model=...`. A model name alone is insufficient.
+- Verified Qwen3.8-Flash-Next templates offer **off / low / medium / xhigh**. Verified DeepSeek-V4.1-Flash templates offer **off / low / high / max**, including the inspected Huihui variants. The template, not quantization, determines eligibility.
+- Native DSH request mapping sends both thinking enablement and the selected effort. Unknown templates or unavailable props preserve existing reasoning settings and show a warning.
+- Provider defaults and current conversation selections are not changed. An incompatible provider default skips reasoning synchronization with a warning. Start a new conversation after syncing.
+
+See [capability evidence and exact mappings](docs/CAPABILITIES.md). No additional plugin or Strata server changes are required.
+
+### Existing synchronization features
 
 - Reads `/v1/models` and, when available, `/slots`. Uses the loaded model ID and actual engine context; it never guesses context from a model name.
 - Updates that DSH model's context and output limit, and its native `compaction-basic` policy inside enabled Agent presets. The preview identifies the affected presets.
@@ -38,7 +52,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.3.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.4.0.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
@@ -86,7 +100,7 @@ recent retention = floor((context − ordinary output) × 0.16)
 | 32,768 | 9,830 | 4,096 | 4,096 | 18,842 (57.50%) | 3,670 |
 | 65,536 | 16,384 | 4,096 | 4,096 | 45,056 (68.75%) | 7,864 |
 
-An explicit output override must leave a valid positive compaction budget and retention smaller than the trigger. Contexts below 8,192 are unsupported. Per-model reasoning choices, credentials, other providers and other model policies are preserved. The selected route's retention is normalized to `retainRatio: 0.16` instead of retaining an incompatible absolute override.
+An explicit output override must leave a valid positive compaction budget and retention smaller than the trigger. Contexts below 8,192 are unsupported. Reasoning choices synchronize only when verified as described above; credentials, other providers and other model policies are preserved. The selected route's retention is normalized to `retainRatio: 0.16` instead of retaining an incompatible absolute override.
 
 This fixes invalid small-window compaction budgets such as the native `headroomTokens: 65536` default on a 32K route. It **cannot guarantee that a model finishes every response or summary within its token cap**. Reasoning also consumes output tokens. Strata's `fit_max_tokens` is not read or changed, and server-side `false` does not disable DSH's own output clamp.
 

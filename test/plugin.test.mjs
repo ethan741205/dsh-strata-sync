@@ -63,7 +63,7 @@ async function harness(options = {}) {
     assert.equal(init.headers.Authorization, 'Bearer do-not-expose-test-secret');
     if (options.beforeFetch) await options.beforeFetch(url);
     if (options.serverStatus) return new Response('private server error body must not be shown', { status: options.serverStatus });
-    return new Response(JSON.stringify(url.endsWith('/models') ? { data: [{ id: 'qwen', status: { value: 'loaded' }, meta: { n_ctx: 32768 } }] } : [{ n_ctx: 32768 }]), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify(url.endsWith('/models') ? { data: [{ id: 'qwen', status: { value: 'loaded' }, meta: { n_ctx: 32768 }, ...(options.modalities ? {architecture:{input_modalities:options.modalities}} : {}) }] } : [{ n_ctx: 32768 }]), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   const ctx = {
     configEditor: {
@@ -188,6 +188,38 @@ test('apply preserves credentials, reasoning, other models and unrelated policie
     const secondApply = await h.call('apply', { fingerprint: second.fingerprint });
     assert.equal(secondApply.value.applied, false); assert.equal(await h.backupCount(), 1);
   } finally { await h.close(); }
+});
+
+test('confirmed input changes apply once while unknown reasoning remains intact', async () => {
+  const h=await harness({modalities:['text']});try {
+    const model=h.entries[0].options.config.providers['strata-server'].models[0];
+    model.reasoningEfforts={off:'none',high:'high'};
+    const p=(await h.call('preview')).value;
+    assert.deepEqual(p.changes.find(c=>c.field==='input').after,['text']);
+    assert.ok(p.server.warnings.includes('REASONING_UNCONFIRMED'));
+    assert.equal((await h.call('apply',{fingerprint:p.fingerprint})).ok,true);
+    const current=h.entries[0].options.config.providers['strata-server'].models[0];
+    assert.deepEqual(current.input,['text']);
+    assert.deepEqual(current.reasoningEfforts,model.reasoningEfforts);
+    assert.equal((await h.call('preview')).value.changes.length,0);
+  }finally{await h.close();}
+});
+
+test('capability changes participate in stale-preview detection', async () => {
+  const modalities=['text','image'];const h=await harness({modalities});try {
+    const p=(await h.call('preview')).value;modalities.pop();
+    const result=await h.call('apply',{fingerprint:p.fingerprint});
+    assert.equal(result.error.code,'stale-preview');assert.equal(h.writes,0);
+  }finally{await h.close();}
+});
+
+test('capability edits roll back when a later edit fails', async () => {
+  const h=await harness({modalities:['text'],rejectCompaction:true});try {
+    const original=structuredClone(h.entries[0].options.config);
+    const p=(await h.call('preview')).value;
+    assert.equal((await h.call('apply',{fingerprint:p.fingerprint})).ok,false);
+    assert.deepEqual(h.entries[0].options.config,original);
+  }finally{await h.close();}
 });
 
 test('a failed second config write rolls the first config back', async () => {

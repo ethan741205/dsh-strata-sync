@@ -208,3 +208,15 @@ test('unknown backend diagnostics remain intact with a localized label', async t
   await ui.click(ui.button('检查差异'));
   assert.equal(ui.container.querySelector('[role=alert]').textContent, '服务器诊断：Connection unavailable');
 });
+
+test('capability preservation warnings and labels are translated in both Chinese locales', async t => {
+  const ui=await mount({previewResult:preview({server:{model:{id:'unknown',capabilities:{input:null,reasoning:null}},warnings:['INPUT_UNCONFIRMED','REASONING_UNCONFIRMED','REASONING_DEFAULT_CONFLICT']}})});t.after(()=>ui.unmount());
+  await ui.click(ui.button('Check differences'));
+  assert.match(ui.container.textContent,/Existing input settings are preserved/);
+  await changeLanguage(ui,'zh-Hant');
+  assert.match(ui.container.textContent,/無法確認 — 保留原設定/);
+  assert.match(ui.container.textContent,/供應者預設推理等級/);
+  await changeLanguage(ui,'zh-Hans');
+  assert.match(ui.container.textContent,/无法确认 — 保留原设置/);
+  assert.match(ui.container.textContent,/提供方默认推理等级/);
+});
