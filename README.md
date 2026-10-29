@@ -8,6 +8,8 @@ Open **Settings → Strata Sync** to inspect differences, synchronize an existin
 
 ![Native DSH Strata Sync settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview.jpg?v=0.4.0)
 
+Version 0.4.1 improves the difference table with aligned values, capability chips, expandable parameter mappings and a stacked layout in narrow panels.
+
 ## What it does
 
 ### Automatic model capabilities (0.4.0)
@@ -52,7 +54,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.4.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.4.1.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.

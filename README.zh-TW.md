@@ -8,6 +8,8 @@ UI 支援 English、简体中文、繁體中文。在外掛頁面上方的「語
 
 ![繁體中文設定介面](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-zh-TW.jpg?v=0.4.0)
 
+0.4.1 改善差異表：數值對齊、能力標籤、可展開的參數對應，以及窄視窗逐項比較。
+
 ## 功能
 
 ### 模型能力自動同步（0.4.0）
@@ -43,7 +45,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.4.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.4.1.tgz
 ```
 
 執行最後一行前，先完成工作並完全結束 DSH Desktop，再使用官方 CLI 安裝，完成後重新開啟。在其他目錄執行時，請使用套件的絕對路徑。首次安裝會自動選取 bundle；已安裝但停用的 bundle 需在外掛管理員重新啟用。

@@ -2,6 +2,10 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## Difference-table layout 0.4.1
+
+All 56 existing tests passed after the UI renderer change. In the isolated native host, a 32K-to-64K preview rendered a 528px table without horizontal overflow, with approximately 180/174/174px columns and right-aligned current/after values. English, Traditional Chinese and Simplified Chinese headers and values were checked in the live DOM. This version also renders capability arrays as chips, nested mappings as expandable details, and stacks rows when the table container is narrower than 440px. The narrow layout has not received a separate visual check. Browser screenshot capture timed out, so existing 0.4.0 screenshots are retained rather than presented as new captures. No synchronization was applied in this layout check.
+
 ## Capability synchronization 0.4.0
 
 - All 56 automated tests pass. New checks cover verified template profiles, exact native efforts, unknown/malformed inputs, unverified reasoning preservation, conflicting provider defaults, localized warnings, stale capabilities, rollback and preservation of unrelated compatibility fields.
