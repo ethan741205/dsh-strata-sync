@@ -7,6 +7,32 @@ const json = data => new Response(JSON.stringify(data), { headers: { 'content-ty
 const stub = (models, slots = [{ n_ctx: 32768 }]) => async url => url.endsWith('/models') ? json({ data: models }) : json(slots);
 const errorCode = code => error => error.code === code;
 
+test('cancelled summary discovery makes no request and never exposes abort details', async () => {
+  const controller = new AbortController();
+  controller.abort(new Error('private cancellation detail'));
+  let calls = 0;
+  await assert.rejects(discoverStrata('http://localhost:8080', '', {
+    signal: controller.signal, fetch: async () => { calls++; return json({}); },
+  }), error => error.code === 'ABORTED' && !error.message.includes('private'));
+  assert.equal(calls,0);
+});
+
+test('an in-flight metadata read follows the original summary cancellation signal', async () => {
+  const controller = new AbortController();
+  let started;
+  const ready = new Promise(resolve => { started = resolve; });
+  const task = discoverStrata('http://localhost:8080', '', {
+    signal:controller.signal,
+    fetch:async (_url,options) => new Promise((_resolve,reject) => {
+      options.signal.addEventListener('abort',()=>reject(new Error('private transport detail')),{once:true});
+      started();
+    }),
+  });
+  await ready;
+  controller.abort();
+  await assert.rejects(task, error => error.code === 'ABORTED' && !error.message.includes('private'));
+});
+
 test('server roots and /v1 normalize without query or embedded credentials', () => {
   assert.equal(normalizeBaseURL('http://localhost:8080/'), 'http://localhost:8080/v1');
   assert.equal(normalizeBaseURL('https://example.test/prefix/v1/'), 'https://example.test/prefix/v1');

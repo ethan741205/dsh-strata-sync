@@ -2,6 +2,15 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## Dynamic summary guidance 0.8.0
+
+- Each supported native summary receives exactly one appended sentence. The target is `floor(min(context / 32, request.maxTokens / 2, selected-content estimate / 2))`; context is the smaller of verified server and existing client capacity. Source estimates exclude system messages, tool schemas and the summary instruction. Unknown attachment pricing and targets below 256 leave the native request unchanged.
+- The official `llm/stream` waterfall is used without replacing the compaction engine. Tests exercise actual Cordis 4.0.5 services, plugin lifecycle and waterfall dispatch, with immutable native messages, concurrent summaries, duplicate hooks, cancellation, metadata failures, early stream closure, native errors and unload. All non-message request options and the complete native prompt are preserved.
+- Plugin-level integration tests verify fresh metadata reads per summary, selected-provider/loaded-model matching, server identity, concurrent configuration edits and conservative client/server context matching. They assert zero configuration writes or backups during summary guidance. No prompt, raw tool content or credentials are recorded by the feature.
+- A separate local integration probe called the **installed DSH 0.2.1-rc.3 native `BasicCompactionEngine.summarize()`** through its shipped Cordis runtime. Synthetic text yielded 1,024 at 32K and 2,048 at 64K; its original prompt, 4,096 output cap, signals, tools and configuration remained unchanged. Unloading the hook restored the original prompt. The adapter returned synthetic chunks: **no inference service was contacted**.
+- English, Simplified Chinese and Traditional Chinese settings-render tests cover the read-only explanation, preview ceiling, unavailable values and live locale changes without adding preferences. All three READMEs describe the same behavior and limitations. Package verification checks the new runtime module is included and the authentic native-prompt test fixture is excluded from the public tarball.
+- The target is a heuristic writing instruction. These checks establish integration and preservation, **not** that a real model always meets the target, never truncates, or stops compacting frequently. Natural-work model validation remains separate. No server or model settings are changed by this feature.
+
 ## npm documentation packaging 0.7.1
 
 - The 0.7.0 tarball included all three root-level README files. Using the npm 11.19.0 publish-time manifest reader (`pacote` with `fullMetadata` and `fullReadJson`) selected `README.zh-TW.md` rather than `README.md`; the result matched the registry's README filename and length.

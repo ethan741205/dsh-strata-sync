@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import z from '@deepseek-ai/schemastery';
 import { discoverStrata, planBudget, StrataSyncError } from './core.mjs';
+import { installSummaryGuidance } from './summary.mjs';
 
 export const inject = ['configEditor', 'connection', 'agents', 'credentials', 'agentPresets'];
 export const Config = z.object({
@@ -168,6 +169,31 @@ export function apply(ctx, initialConfig) {
     }
     return undefined; // Unauthenticated local Strata servers are also supported.
   }
+  async function summaryContext(options) {
+    ensureOpen();
+    refreshSettings();
+    const routes = entry('@deepseek-ai/dsh-llm-pi-ai').options.config?.providers ?? {};
+    const providerId = providerChoice(routes);
+    if (options.provider !== providerId) return null;
+    const route = clone(routes[providerId]);
+    if (route.api && route.api !== 'openai-completions') return null;
+    if (!Array.isArray(route.models) || Object.keys(route.modelOverrides ?? {}).length) return null;
+    const model = route.models.find(row => row.id === options.model);
+    if (!Number.isSafeInteger(model?.contextWindow) || model.contextWindow < 1) return null;
+    const revision = hash({ route, settings: publicSettings() });
+    const apiKey = await credential(providerId, route);
+    ensureOpen();
+    const discovered = await discoverStrata(route.baseURL, apiKey, {
+      modelId: options.model, timeout: 2000, signal: options.signal,
+    });
+    ensureOpen();
+    refreshSettings();
+    const current = entry('@deepseek-ai/dsh-llm-pi-ai').options.config?.providers ?? {};
+    if (hash({ route: current[providerId], settings: publicSettings() }) !== revision || !discovered.verifiedServer) return null;
+    // A server/client mismatch must not enlarge the target past either capacity.
+    return Math.min(discovered.model.contextWindow, model.contextWindow);
+  }
+  installSummaryGuidance(ctx, summaryContext);
   async function preview(request = {}) {
     ensureOpen();
     payload(request, ['providerId', 'outputTokens']);

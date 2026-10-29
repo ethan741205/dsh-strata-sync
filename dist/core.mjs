@@ -88,13 +88,14 @@ export function planBudget(contextWindow, { outputTokens, serverOutputTokens } =
   });
 }
 
-async function readJSON(url, apiKey, { fetch: fetchImpl, timeout }) {
+async function readJSON(url, apiKey, { fetch: fetchImpl, timeout, signal }) {
+  if (signal?.aborted) fail('ABORTED', 'Strata discovery was cancelled.');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   timer.unref?.();
   try {
     const response = await fetchImpl(url, {
-      method: 'GET', redirect: 'error', signal: controller.signal,
+      method: 'GET', redirect: 'error', signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
       headers: { Accept: 'application/json', ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
     });
     if (response.redirected || (response.status >= 300 && response.status < 400)) {
@@ -128,6 +129,7 @@ async function readJSON(url, apiKey, { fetch: fetchImpl, timeout }) {
     catch { fail('INVALID_JSON', 'Strata discovery did not return valid JSON.'); }
   } catch (error) {
     if (error instanceof StrataSyncError) throw error;
+    if (signal?.aborted) fail('ABORTED', 'Strata discovery was cancelled.');
     if (controller.signal.aborted) fail('TIMEOUT', 'Strata discovery timed out.');
     // Never propagate fetch errors, server bodies, request headers, or credentials.
     fail('CONNECTION_FAILED', 'Unable to read Strata metadata. Check the URL, connection, and credentials.');
@@ -213,7 +215,7 @@ export async function discoverStrata(baseURL, apiKey = '', options = {}) {
   if (typeof fetchImpl !== 'function' || !Number.isInteger(timeout) || timeout < 1 || timeout > 120000) {
     fail('INVALID_OPTIONS', 'A fetch implementation and timeout between 1 and 120000 milliseconds are required.');
   }
-  const request = { fetch: fetchImpl, timeout };
+  const request = { fetch: fetchImpl, timeout, signal: options.signal };
   const listing = await readJSON(`${normalized}/models`, apiKey, request);
   if (!listing || !Array.isArray(listing.data) || listing.data.length > 1024) {
     fail('INVALID_MODELS', 'Strata did not return a valid model list.');
@@ -276,6 +278,7 @@ export async function discoverStrata(baseURL, apiKey = '', options = {}) {
   warnings.push(...capabilities.warnings);
   return {
     baseURL: normalized,
+    verifiedServer: evidence.verifiedStrata === true && evidence.modelMatched === true,
     model: { id: selected.id, name: selected.name, contextWindow, contextSource: liveContext !== null ? 'slots.n_ctx' : 'models.meta.n_ctx', serverOutputTokens, outputLimitStatus, capabilities },
     models: models.map(({modalities, ...model}) => model), warnings,
   };

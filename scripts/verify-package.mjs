@@ -8,7 +8,7 @@ import PackageJson from '@npmcli/package-json';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const repository = 'https://github.com/ethan741205/dsh-strata-sync';
 const required = ['LICENSE', 'README.md', 'package.json', 'cordis.patch.yml',
-  'dist/index.js', 'dist/client.js', 'dist/core.mjs',
+  'dist/index.js', 'dist/client.js', 'dist/core.mjs', 'dist/summary.mjs',
   'docs/README.zh-CN.md', 'docs/README.zh-TW.md', 'docs/CAPABILITIES.md', 'docs/VALIDATION.md'];
 
 export async function verifyPackage() {
@@ -36,7 +36,7 @@ export async function verifyPackage() {
     assert.ok(files.has(target.replace(/^\.\//, '')), `Missing runtime entry: ${target}`);
   }
   assert.match(await readFile(join(root, 'cordis.patch.yml'), 'utf8'), /name: ['"]?@ethan741205\/dsh-strata-sync/);
-  for (const [source, built] of [['src/plugin.mjs', 'dist/index.js'], ['src/client.js', 'dist/client.js'], ['src/core.mjs', 'dist/core.mjs']]) {
+  for (const [source, built] of [['src/plugin.mjs', 'dist/index.js'], ['src/client.js', 'dist/client.js'], ['src/core.mjs', 'dist/core.mjs'], ['src/summary.mjs', 'dist/summary.mjs']]) {
     assert.equal((await readFile(join(root, source), 'utf8')).replace(/\r\n/g, '\n'),
       (await readFile(join(root, built), 'utf8')).replace(/\r\n/g, '\n'), `Run npm run build: ${built} is stale.`);
   }

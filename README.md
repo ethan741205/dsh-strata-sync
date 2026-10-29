@@ -6,9 +6,28 @@ A plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded b
 
 Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts. The interface and README are available in English, Simplified Chinese and Traditional Chinese. The interface automatically follows DSH’s language, including live changes. DSH `zh` uses Simplified Chinese; `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` use Traditional Chinese. Other languages fall back to English. There is no separate language preference. Unknown backend diagnostics retain their original text for troubleshooting.
 
-Version 0.7.1 fixes npm README selection and documentation packaging, adds registry installation instructions, and completes package metadata. Synchronization behavior is unchanged from 0.7.0: concurrent edits are protected, startup sync resumes after an intervening task, and model aliases and image-generation endpoints are distinguished correctly. The settings page makes **Follow Strata** explicit, keeps manual overrides under **Advanced settings**, and retains the last sync result.
+Version 0.8.0 calculates a dynamic length target before each supported Strata summary and appends **one sentence** to DSH's native summary prompt. The original prompt, output cap and other settings remain unchanged. The settings page explains the formula and distinguishes this writing target from the hard output limit. Existing synchronization safeguards, startup behavior, capability verification and backups are retained.
 
 ## What it does
+
+### Dynamic summary guidance
+
+For supported Strata routes, the plugin calculates a fresh writing target for each native DSH summary request:
+
+```text
+context = min(verified Strata context, existing DSH model context)
+target = floor(min(context / 32,
+                   actual summary maxTokens / 2,
+                   selected-content estimated tokens / 2))
+```
+
+The selected-content estimate covers only the conversation span being replaced, including any prior checkpoint in that span. It excludes the system prompt and tool schemas. Before each summary, read-only metadata queries verify Strata's loaded model and context; the current summary request supplies its actual output cap. The calculation uses the smaller of verified server context and the existing DSH model context, so a larger server window never silently expands a smaller client budget. The target is calculated at summary time, not fixed when DSH starts or when settings are synchronized.
+
+With a 4,096-token summary output cap and enough source content, 32K context gives a target of **1,024 tokens**, and 64K gives **2,048 tokens**. Shorter content lowers the target. **Settings → Strata Sync** shows the formula and the maximum target for a preview; it cannot know the exact target of a future summary.
+
+Exactly one supplemental English sentence asks the model to meet that target, retain information needed to continue the remaining work, consolidate prior summaries and remove redundant or obsolete details. The native instructions, eight-section format and existing request options are preserved. The target is a heuristic writing instruction, **not a new hard output limit, an optimal value, or a guarantee against truncation**. No automatic retry loop or extra inference request is added.
+
+If the route, required metadata or native summary format cannot be verified, or image/file attachment pricing cannot be estimated safely, the original DSH request is passed through unchanged. A cancelled request or disabled plugin also preserves native handling. Calculated targets below 256 tokens leave the native prompt unchanged, rather than imposing an impractically small target for eight sections; the plugin does not cancel the summary or replace content with an empty checkpoint. Disabling or removing this plugin removes the supplemental guidance; it does not rewrite saved conversation history.
 
 ### Automatic model capabilities (0.4.0)
 
@@ -33,7 +52,7 @@ See [capability evidence and exact mappings](https://github.com/ethan741205/dsh-
 - Keeps a read-only last-sync result with model, budgets, output source and backup information. Reports verified and preserved capabilities separately.
 - Uses DSH's existing credential service. Keys never appear in the page or diagnostics; redirects are not followed.
 
-**Start a new conversation after syncing.** Existing conversations keep their selected model route and Agent preset revision. Default-model following and updated preset policies apply to new work; this plugin does not rewrite existing conversations or restart DSH.
+**Start a new conversation after syncing model or budget settings.** Existing conversations keep their selected model route and Agent preset revision. Default-model following and updated preset policies apply to new work; this plugin does not rewrite existing conversations or restart DSH. Dynamic summary guidance operates on supported summary requests while the updated plugin is active and does not require changing those saved settings.
 
 ## Compatibility
 
@@ -47,7 +66,9 @@ The startup idle-wait scheduler includes a narrow DSH 0.2.1-rc.3 compatibility a
 
 ## Install
 
-Finish active tasks and fully quit DSH Desktop, then install from the public npm registry with the official DSH CLI:
+**Version 0.8.0 is currently available from this GitHub source and its built tarball. npm `latest` is still 0.7.1 and does not include dynamic summary guidance.** To use the new feature, follow the source/tarball installation below. This GitHub update does not publish a new npm version.
+
+For the existing npm release, finish active tasks and fully quit DSH Desktop, then install with the official DSH CLI:
 
 ```sh
 dsh plugin --profile desktop add @ethan741205/dsh-strata-sync --registry=https://registry.npmjs.org/
@@ -55,7 +76,7 @@ dsh plugin --profile desktop add @ethan741205/dsh-strata-sync --registry=https:/
 
 Reopen DSH after installation. The bundle is automatically selected on its first installation; an already installed but disabled bundle must be enabled in DSH's plugin manager.
 
-To build from source instead, use Node.js 22 or newer:
+To install **0.8.0 with dynamic summary guidance**, build from this source with Node.js 22 or newer, finish active tasks and fully quit DSH Desktop before the final installation command:
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -63,7 +84,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.7.1.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.8.0.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
@@ -122,7 +143,7 @@ These table examples use the calculated fallback (no manual or fixed server limi
 
 An explicit output override must leave a valid positive compaction budget and retention smaller than the trigger. Contexts below 8,192 are unsupported. Reasoning choices synchronize only when verified as described above; credentials, other providers and other model policies are preserved. The selected route's retention is normalized to `retainRatio: 0.16` instead of retaining an incompatible absolute override.
 
-This fixes invalid small-window compaction budgets such as the native `headroomTokens: 65536` default on a 32K route. It **cannot guarantee that a model finishes every response or summary within its token cap**. Reasoning also consumes output tokens. Strata's `fit_max_tokens` is not read or changed, and server-side `false` does not disable DSH's own output clamp.
+This fixes invalid small-window compaction budgets such as the native `headroomTokens: 65536` default on a 32K route. Dynamic summary guidance uses the current summary cap to calculate a shorter writing target; it does not increase or reduce that cap. Neither feature **guarantees that a model finishes every response or summary within its token cap**. Reasoning also consumes output tokens. Strata's `fit_max_tokens` is not read or changed, and server-side `false` does not disable DSH's own output clamp.
 
 ## Backups and recovery
 
@@ -132,7 +153,7 @@ Disabling auto-sync cancels a pending startup sync and disables it for future st
 
 ## Development
 
-`src/plugin.mjs` is the host plugin, `src/client.js` is the native ModuleLoader/React UI, and `src/core.mjs` is metadata discovery and pure budget planning. Build copies them into the publishable `dist/` directory; no bundled private app source is included.
+`src/plugin.mjs` is the host plugin, `src/client.js` is the native ModuleLoader/React UI, `src/core.mjs` is metadata discovery and pure budget planning, and `src/summary.mjs` provides the native summary-request middleware. Build copies them into the publishable `dist/` directory; no bundled private app source is included.
 
 ```sh
 npm ci
@@ -141,7 +162,7 @@ npm run build
 npm pack --dry-run
 ```
 
-The 0.7.0 runtime passed all 94 automated tests, including 29 new regression tests for concurrent edits, multi-window preference conflicts, busy-to-idle startup deferral, aliases and non-text generators, catalog compatibility, delayed responses and retained UI results. Version 0.7.1 keeps that runtime unchanged and corrects release packaging. Existing tests cover credentials/redirect safety, budgets, rollback, HMR deduplication, preset activation and request mappings. Tests use simulated endpoints and DSH services; they do not generate model responses. See [validation notes](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/VALIDATION.md) for the verified version and the isolated native-host checks.
+Automated tests cover discovery and credentials/redirect safety, budgets, rollback, concurrent edits, startup deferral, aliases and non-text generators, HMR deduplication, preset activation, request mappings and the multilingual settings UI. Dynamic summary tests cover target calculation and the native request integration; UI tests verify the preview ceiling and distinguish it from the actual per-request target. Tests use simulated endpoints and DSH services; they do not generate model responses or establish a real-world truncation rate. See [validation notes](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/VALIDATION.md) for the verified version and checks.
 
 References: [DSH compaction documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md), [Strata](https://github.com/Niko1221/Strata).
 

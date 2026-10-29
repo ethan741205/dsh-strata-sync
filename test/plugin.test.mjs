@@ -106,13 +106,91 @@ async function harness(options = {}) {
     return (await response.json()).result;
   };
   const dispose = () => { for (const cleanup of effects.splice(0)) cleanup?.(); };
-  return { call, raw, entries, ctx, dispose, get requests() { return requests; }, get writes() { return writes; },
+  return { call, raw, entries, ctx, dispose, stream: (options, next) => callbacks['llm/stream'](options, next), get requests() { return requests; }, get writes() { return writes; },
     reload: () => { dispose(); poll=undefined; apply(ctx, entries[3].options.config); }, setRunning: value => { running = value; },
     poll: async () => { poll?.(); for (let i = 0; i < 25; i++) { await new Promise(resolve => setTimeout(resolve, 5)); } },
     backupCount: async () => { try { return (await readdir(join(dir, 'backups', 'strata-sync'))).length; } catch { return 0; } },
     close: async () => { dispose(); globalThis.setInterval = realInterval; globalThis.clearInterval = realClear; globalThis.fetch = realFetch; await rm(dir, { recursive: true, force: true }); },
   };
 }
+
+const nativeSummaryPrompt = () => readFile(new URL('./fixtures/native-summary-instruction.txt', import.meta.url), 'utf8');
+async function summaryRequest(overrides = {}) {
+  return { provider: 'strata-server', model: 'qwen', purpose: 'compaction', maxTokens: 4096,
+    sessionId: 'test-summary', messages: [
+      { role: 'system', content: [{ type: 'text', text: 'System prompt is not compactable.'.repeat(400) }] },
+      { role: 'user', content: [{ type: 'text', text: 'Selected history. '.repeat(4000) }] },
+      { role: 'user', content: [{ type: 'text', text: await nativeSummaryPrompt() }] },
+    ], ...overrides };
+}
+const verifiedProps = () => ({ build_info: 'Strata 0.1.52', model_alias: 'qwen', default_generation_settings: { params: { n_predict: -1 } } });
+
+test('live summaries recheck verified metadata and append one sentence without configuration writes', async () => {
+  const h = await harness({ props: verifiedProps });
+  try {
+    h.setRunning(true);
+    const before = structuredClone(h.entries.map(row => row.options.config));
+    for (const [maxTokens, target] of [[4096,1024],[1024,512]]) {
+      const options = await summaryRequest({ maxTokens });
+      const original = structuredClone(options);
+      let dispatches = 0;
+      for await (const chunk of h.stream(options, async function* () {
+        dispatches++;
+        assert.ok(options.messages.at(-1).content[0].text.startsWith(original.messages.at(-1).content[0].text + '\n- '));
+        assert.match(options.messages.at(-1).content[0].text, new RegExp(`target of ${target} tokens`));
+        assert.deepEqual({ ...options, messages: original.messages }, original);
+        yield { type: 'finish', reason: { kind: 'stop' } };
+      })) assert.equal(chunk.reason.kind, 'stop');
+      assert.equal(dispatches,1);
+      assert.deepEqual(options, original);
+    }
+    assert.equal(h.requests,6);
+    assert.equal(h.writes,0);
+    assert.equal(await h.backupCount(),0);
+    assert.deepEqual(h.entries.map(row => row.options.config), before);
+  } finally { await h.close(); }
+});
+
+test('summary guidance is confined to the selected provider and actually loaded model', async () => {
+  const h = await harness({ props: verifiedProps });
+  try {
+    for (const route of [{ provider:'cloud' },{ model:'other-model' }]) {
+      const options = await summaryRequest(route), original = structuredClone(options);
+      for await (const _ of h.stream(options, async function* () { assert.deepEqual(options,original); yield {}; })) {}
+    }
+    // Other providers never receive discovery traffic; the unloaded model is
+    // rejected by its model listing before any optional metadata is requested.
+    assert.equal(h.requests,1);
+    assert.equal(h.writes,0);
+  } finally { await h.close(); }
+});
+
+test('unverified servers and model edits during discovery leave native summaries untouched', async () => {
+  for (const changed of [false,true]) {
+    let h;
+    h = await harness({ props: () => changed ? verifiedProps() : { build_info:'Unknown',model_alias:'qwen' },
+      beforeFetch: changed ? async url => {
+        if (url.endsWith('/models')) h.entries[0].options.config.providers['strata-server'].models[0].contextWindow = 16384;
+      } : undefined });
+    try {
+      const options = await summaryRequest(), original = structuredClone(options);
+      for await (const _ of h.stream(options, async function* () { assert.deepEqual(options,original); yield {}; })) {}
+      assert.equal(h.writes,0);
+    } finally { await h.close(); }
+  }
+});
+
+test('summary target respects a smaller existing client context without syncing any settings', async () => {
+  const h = await harness({ props: verifiedProps });
+  try {
+    h.entries[0].options.config.providers['strata-server'].models[0].contextWindow = 16384;
+    const options = await summaryRequest();
+    for await (const _ of h.stream(options, async function* () {
+      assert.match(options.messages.at(-1).content[0].text,/target of 512 tokens/); yield {};
+    })) {}
+    assert.equal(h.writes,0);
+  } finally { await h.close(); }
+});
 
 test('exact routes use the native owner-only admission boundary without server queries or writes', async () => {
   const h = await harness(); try {

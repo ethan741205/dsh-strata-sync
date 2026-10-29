@@ -83,6 +83,50 @@ window.__ModuleLoader__.load({
     "zh-Hant": "摘要輸出上限",
     "zh-Hans": "摘要输出上限"
   },
+  "Dynamic summary target": {
+    "zh-Hant": "動態摘要目標",
+    "zh-Hans": "动态摘要目标"
+  },
+  "How the target is calculated": {
+    "zh-Hant": "目標如何計算",
+    "zh-Hans": "目标如何计算"
+  },
+  "Before each supported Strata summary, calculates a length target and appends one sentence to DSH's native summary prompt.": {
+    "zh-Hant": "每次支援的 Strata 摘要請求前，計算長度目標，並在 DSH 原生摘要提示詞後補充一句。",
+    "zh-Hans": "每次支持的 Strata 摘要请求前，计算长度目标，并在 DSH 原生摘要提示词后补充一句。"
+  },
+  "Target = floor(min(context / 32, summary output limit / 2, selected content estimate / 2)).": {
+    "zh-Hant": "目標 = floor(min(上下文 / 32, 摘要輸出上限 / 2, 待壓縮內容估算 / 2))。",
+    "zh-Hans": "目标 = floor(min(上下文 / 32, 摘要输出上限 / 2, 待压缩内容估算 / 2))。"
+  },
+  "Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.": {
+    "zh-Hant": "上下文採用已確認的 Strata 視窗與 DSH 既有模型視窗的較小值。預覽上限依提議預算計算，既有對話設定可能讓實際目標更低。",
+    "zh-Hans": "上下文采用已确认的 Strata 窗口与 DSH 已有模型窗口的较小值。预览上限按提议预算计算，已有对话设置可能让实际目标更低。"
+  },
+  "The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.": {
+    "zh-Hant": "保留原生提示詞、輸出硬上限與其他設定。這是寫作目標，不保證實際長度，也不代表最佳值。",
+    "zh-Hans": "保留原生提示词、输出硬上限与其他设置。这是写作目标，不保证实际长度，也不代表最佳值。"
+  },
+  "Maximum target for this preview: ": {
+    "zh-Hant": "本次預覽的目標上限：",
+    "zh-Hans": "本次预览的目标上限："
+  },
+  "The actual target may be lower for shorter content. System prompts and tool schemas are excluded from the content estimate.": {
+    "zh-Hant": "內容較短時，實際目標會更低；內容估算不包含系統提示詞與工具定義。",
+    "zh-Hans": "内容较短时，实际目标会更低；内容估算不包含系统提示词与工具定义。"
+  },
+  "If the route or native summary format cannot be verified, DSH uses its original prompt.": {
+    "zh-Hant": "無法確認路由或原生摘要格式時，DSH 沿用原本提示詞。",
+    "zh-Hans": "无法确认路由或原生摘要格式时，DSH 沿用原本提示词。"
+  },
+  "Unpriced image/file attachments, cancellation or a disabled plugin preserve native request handling.": {
+    "zh-Hant": "無法估算圖片／檔案附件用量、請求取消或外掛停用時，保留原生請求處理。",
+    "zh-Hans": "无法估算图片／文件附件用量、请求取消或插件禁用时，保留原生请求处理。"
+  },
+  "Targets below 256 tokens leave the original prompt unchanged; the native summary still runs.": {
+    "zh-Hant": "目標小於 256 tokens 時保留原本提示詞，原生摘要仍會執行。",
+    "zh-Hans": "目标小于 256 tokens 时保留原本提示词，原生摘要仍会执行。"
+  },
   "Compaction threshold": {
     "zh-Hant": "壓縮門檻",
     "zh-Hans": "压缩阈值"
@@ -371,6 +415,8 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       const dirty=!!baseline.current&&!equal(draft,baseline.current.values);
       const displayedResult=!result || state?.lastApplied?.at>result.at ? state?.lastApplied : result;
       const activeBudget=preview?.budget;
+      const summaryTargetCeiling=Number.isSafeInteger(activeBudget?.contextWindow)&&activeBudget.contextWindow>0&&Number.isSafeInteger(activeBudget?.summaryMaxTokens)&&activeBudget.summaryMaxTokens>0
+        ? Math.floor(Math.min(activeBudget.contextWindow/32,activeBudget.summaryMaxTokens/2)) : null;
       const outputSource=(budget)=>t(({server:'Strata Server default',manual:'Manual override',calculated:'Automatic calculation'})[budget?.outputSource]||'Automatic calculation');
       const preserved=(view)=>{
         const status=view?.capabilityStatus;
@@ -426,6 +472,18 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
             setPreview(null);setNotice(r.applied?'Synced and backed up the original settings. Start a new conversation to use the updated compaction policy.':'Settings already match. No changes needed.');await refresh();
           })},t('Back up and sync'))),
         dirty&&!conflict&&h('p',{className:'ss-muted'},t('Save preferences before checking for differences.')),
+        h('div',{className:'ss-card','data-testid':'summary-target'},
+          h('strong',null,t('Dynamic summary target')),
+          h('p',null,t("Before each supported Strata summary, calculates a length target and appends one sentence to DSH's native summary prompt.")),
+          summaryTargetCeiling!==null&&h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens'),
+          h('details',{className:'ss-details'},h('summary',null,t('How the target is calculated')),
+            h('p',{className:'ss-muted'},t('Target = floor(min(context / 32, summary output limit / 2, selected content estimate / 2)).')),
+            h('p',{className:'ss-muted'},t('Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.')),
+            h('p',{className:'ss-muted'},t('The actual target may be lower for shorter content. System prompts and tool schemas are excluded from the content estimate.')),
+            h('p',{className:'ss-muted'},t('The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.')),
+            h('p',{className:'ss-muted'},t('Targets below 256 tokens leave the original prompt unchanged; the native summary still runs.')),
+            h('p',{className:'ss-muted'},t('If the route or native summary format cannot be verified, DSH uses its original prompt.')),
+            h('p',{className:'ss-muted'},t('Unpriced image/file attachments, cancellation or a disabled plugin preserve native request handling.')))),
         preview&&h('div',{className:'ss-card'},
           h('strong',null,'Strata Server'),h('p',null,h('code',null,preview.server?.model?.id)),
           h('div',{className:'ss-grid'},

@@ -6,9 +6,28 @@
 
 UI 支援 English、简体中文、繁體中文。自動跟隨 DSH 介面語言並即時更新，不提供獨立語言選單。DSH 的 `zh` 對應簡體中文，`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO` 對應繁體中文；其他語言使用英文。伺服器傳回的未知診斷訊息保留原文，以利排查。
 
-0.7.1 修正 npm 主 README 的選擇與文件打包，加入官方 registry 安裝說明，並補齊套件資訊。同步行為沿用 0.7.0：保護並行修改、在工作結束後補做啟動同步，並正確辨識模型別名與圖片生成端點。介面明確提供「跟隨 Strata」，將手動覆寫放在「進階設定」，並保留上次同步結果。
+0.8.0 的動態摘要引導會在每次支援的 Strata 摘要請求前計算長度目標，並在 DSH 原生摘要提示詞後**只補充一句**。保留原提示詞、輸出硬上限與其他設定；設定頁解釋公式，並區分寫作目標與輸出硬上限。既有同步保護、啟動行為、能力驗證及備份機制保持不變。
 
 ## 功能
+
+### 動態摘要引導
+
+對於支援的 Strata 路由，外掛在每次 DSH 原生摘要請求前重新計算寫作目標：
+
+```text
+上下文 = min(已確認的 Strata 上下文, DSH 既有模型上下文)
+目標 = floor(min(上下文 / 32,
+                 本次摘要實際 maxTokens / 2,
+                 待替換內容的估算 tokens / 2))
+```
+
+內容估算只包含這次要替換的對話片段，以及片段內既有的摘要；不包含系統提示詞和工具定義。外掛在每次摘要前透過唯讀查詢核對 Strata 目前載入模型與上下文，並讀取本次摘要請求的實際輸出硬上限。上下文取伺服器已確認值與 DSH 既有模型設定的較小值，不會因為伺服器視窗較大而偷偷擴大較小的客戶端預算。目標不是啟動 DSH 或同步設定時固定下來的。
+
+摘要硬上限為 4,096、原文足夠長時，32K 上下文對應 **1,024 tokens**，64K 對應 **2,048 tokens**；內容較短時目標會降低。**設定 → Strata Sync** 顯示公式與本次預覽的目標上限，無法提前得知未來摘要的實際目標。
+
+外掛只補充一句英文，要求模型依目標長度完成摘要、保留接續未完成工作所需的資訊、整合舊摘要，並刪除重複或過時細節。原生提示詞、八個章節和既有請求參數保持不變。這是啟發式寫作目標，**不是新的輸出硬上限、最佳值，也不能保證不截斷**；不增加自動重試流程或額外推論請求。
+
+無法確認路由、必要資訊或原生摘要格式，或無法安全估算圖片／檔案附件的 token 用量時，原請求不變並交由 DSH 處理。請求已取消或外掛已停用時也保留原生處理。計算目標小於 256 tokens 時不補充句子，避免給八個章節強加過小的目標；不取消原生摘要，也不以空摘要替換原文。停用或移除外掛後不再補充這句話，不會改寫已儲存的對話歷史。
 
 ### 模型能力自動同步（0.4.0）
 
@@ -32,11 +51,13 @@ UI 支援 English、简体中文、繁體中文。自動跟隨 DSH 介面語言�
 - 同步完成後保留唯讀結果，包含模型、預算、輸出來源及備份資訊，並區分已確認與保留原值的能力。
 - 沿用 DSH 現有認證，不在頁面或診斷中顯示金鑰，不跟隨 HTTP 重新導向。
 
-**同步後請開新對話。** 既有對話保留原模型路由與 Agent 範本版本；外掛不重寫既有對話、不重啟 DSH，也不向模型發送推論請求。
+**同步模型或預算設定後請開新對話。** 既有對話保留原模型路由與 Agent 範本版本；外掛不重寫既有對話、不重啟 DSH，也不增加額外推論請求。新版外掛啟用期間，動態摘要引導會作用於支援的摘要請求，不需要修改這些已儲存設定。
 
 ## 安裝與使用
 
-先完成工作並完全結束 DSH Desktop，再使用官方 DSH CLI 從 npm 官方 registry 安裝：
+**0.8.0 目前透過此 GitHub 原始碼及其建置的 tarball 提供；npm `latest` 仍為 0.7.1，不包含動態摘要引導。** 要使用新功能，請依下方原始碼／tarball 步驟安裝。本次 GitHub 更新不發布新的 npm 版本。
+
+若要安裝既有的 npm 版本，先完成工作並完全結束 DSH Desktop，再使用官方 DSH CLI 從 npm 官方 registry 安裝：
 
 ```sh
 dsh plugin --profile desktop add @ethan741205/dsh-strata-sync --registry=https://registry.npmjs.org/
@@ -44,7 +65,7 @@ dsh plugin --profile desktop add @ethan741205/dsh-strata-sync --registry=https:/
 
 完成後重新開啟 DSH。首次安裝會自動選取 bundle；已安裝但停用的 bundle 需在外掛管理員重新啟用。
 
-如需從原始碼建置，請使用 Node.js 22 或更新版本：
+要安裝**包含動態摘要引導的 0.8.0**，請使用 Node.js 22 或更新版本從此原始碼建置，並在最後的安裝命令前完成工作、完全結束 DSH Desktop：
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -52,7 +73,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.7.1.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.8.0.tgz
 ```
 
 執行最後一行前同樣需要完全結束 DSH Desktop，安裝完成後重新開啟。在其他目錄執行時，請使用套件的絕對路徑。
@@ -103,7 +124,7 @@ retainRatio = 0.16
 
 自訂輸出上限必須保留有效的正數壓縮預算，且近期保留量須低於門檻。不支援小於 8,192 的上下文。推理選項僅於確認支援時同步；保留認證、其他供應者與其他模型策略；選定路由的保留量統一為 `retainRatio: 0.16`，以免沿用不相容的絕對值。
 
-此策略可修正 32K 路由沿用原生 `headroomTokens: 65536` 等不適當預算，但**不能保證模型每次都能在輸出上限內完成回答或摘要**，推理也會消耗輸出 tokens。不讀取或修改 Strata 的 `fit_max_tokens`；伺服器設為 `false` 也不會停用 DSH 自身的輸出限制。
+此策略可修正 32K 路由沿用原生 `headroomTokens: 65536` 等不適當預算。動態摘要引導依本次摘要上限計算較短的寫作目標，不會提高或降低硬上限；兩項功能都**不能保證模型每次都能在輸出上限內完成回答或摘要**，推理也會消耗輸出 tokens。不讀取或修改 Strata 的 `fit_max_tokens`；伺服器設為 `false` 也不會停用 DSH 自身的輸出限制。
 
 ## 備份與復原
 
@@ -115,8 +136,8 @@ ConfigEditor 負責個別原子寫入與熱載入；跨多項設定採補償回�
 
 0.5.0 移除獨立語言選單與產品聲明，改為跟隨 DSH 語言及啟動時單次同步。0.3.0 首次加入三語 UI，0.2.0 將 UI 移入原生設定。
 
-`src/plugin.mjs` 為宿主外掛，`src/client.js` 為原生 ModuleLoader/React UI，`src/core.mjs` 負責資訊讀取與純預算計算。執行 `npm test`、`npm run build`、`npm pack --dry-run` 驗證。套件只包含原創外掛程式，不包含私人應用程式原始碼、認證或對話。
+`src/plugin.mjs` 為宿主外掛，`src/client.js` 為原生 ModuleLoader/React UI，`src/core.mjs` 負責資訊讀取與純預算計算，`src/summary.mjs` 提供原生摘要請求中介層。執行 `npm test`、`npm run build`、`npm pack --dry-run` 驗證。套件只包含原創外掛程式，不包含私人應用程式原始碼、認證或對話。
 
-0.7.0 的執行程式已通過全部 94 項自動測試，包含 29 項新增回歸測試，涵蓋並行修改、多視窗偏好衝突、工作完成後補做啟動同步、別名與非文字生成模型、模型目錄相容性、延遲回應及同步結果保留。0.7.1 沿用相同執行程式，修正發布包裝。測試使用模擬服務，不產生模型回答。驗證範圍與原生宿主測試見 [VALIDATION](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/VALIDATION.md)。參考：[DSH 壓縮文件](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md)、[Strata](https://github.com/Niko1221/Strata)。
+自動測試涵蓋資訊讀取、認證與重新導向安全、預算、回復、並行修改、啟動等待、別名與非文字生成模型、HMR 去重、範本啟用、請求對應及三語介面。動態摘要測試涵蓋目標計算與原生請求整合；UI 測試確認預覽上限與每次請求實際目標的區別。測試使用模擬服務，不產生模型回答，也不代表實際截斷率已驗證。版本與驗證範圍見 [VALIDATION](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/VALIDATION.md)。參考：[DSH 壓縮文件](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md)、[Strata](https://github.com/Niko1221/Strata)。
 
 MIT 授權。
