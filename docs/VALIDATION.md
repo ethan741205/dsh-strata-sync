@@ -2,6 +2,15 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## npm documentation packaging 0.7.1
+
+- The 0.7.0 tarball included all three root-level README files. Using the npm 11.19.0 publish-time manifest reader (`pacote` with `fullMetadata` and `fullReadJson`) selected `README.zh-TW.md` rather than `README.md`; the result matched the registry's README filename and length.
+- Version 0.7.1 keeps only the English `README.md` at the package root. The translated READMEs move into `docs/`, along with capability and validation documentation included in the package. README links use absolute GitHub URLs so their destinations work from the npm package page as well as GitHub.
+- All three READMEs now make public-registry installation the primary path and retain source/tarball installation as an alternative. Package metadata supplies explicit documentation, issue-reporting, discovery and publishing information.
+- All **95 tests pass**, including the 94 existing tests and a new publish-artifact regression test. The verifier uses npm's package metadata reader and actual pack file list to check the chosen README, all 11 public files, documentation links, entry points, current build artifacts and publishing metadata. It runs again through `prepublishOnly` for directory publication. Dependency audit reported no known vulnerabilities.
+- This patch changes release packaging and documentation, not the synchronization runtime. The native DSH checks described under 0.7.0 remain the prior integration baseline. Registry publication and npm website rendering must be verified separately after release.
+- The observed 0.7.0 npm page showed no README even though registry metadata contained its text, matching a staged-publishing website/registry discrepancy reported in [npm/cli issue 9405](https://github.com/npm/cli/issues/9405). The root README selection issue is separately reproducible; fixing it does not by itself prove the website discrepancy is resolved.
+
 ## Synchronization and settings safeguards 0.7.0
 
 - All **94 tests pass**, including 29 new regression tests. Coverage now includes changes during discovery and queued writes, revision-checked preference patches, multi-window conflicts, busy-to-idle startup deferral, startup readiness errors, alias resolution, non-text generators, unsupported catalog routes, delayed status responses and retained sync results.

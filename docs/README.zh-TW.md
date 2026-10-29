@@ -1,12 +1,12 @@
 # DSH Strata Sync
 
-[English](README.md) · [简体中文](README.zh-CN.md) · **繁體中文**
+[English](https://github.com/ethan741205/dsh-strata-sync/blob/main/README.md) · [简体中文](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/README.zh-CN.md) · **繁體中文**
 
 讓 **DeepSeek Harness（DSH）** 對齊 **Strata Server** 實際載入的模型，並在 DSH **設定 → Strata Sync** 中提供操作介面。
 
 UI 支援 English、简体中文、繁體中文。自動跟隨 DSH 介面語言並即時更新，不提供獨立語言選單。DSH 的 `zh` 對應簡體中文，`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO` 對應繁體中文；其他語言使用英文。伺服器傳回的未知診斷訊息保留原文，以利排查。
 
-0.7.0 加入並行修改保護、修正工作插入時漏掉的啟動同步，並正確辨識模型別名與圖片生成端點。介面明確提供「跟隨 Strata」，將手動輸出覆寫移入「進階設定」，並保留上次同步結果；無法確認的能力會列為保留原值，不會顯示為全部驗證完成。
+0.7.1 修正 npm 主 README 的選擇與文件打包，加入官方 registry 安裝說明，並補齊套件資訊。同步行為沿用 0.7.0：保護並行修改、在工作結束後補做啟動同步，並正確辨識模型別名與圖片生成端點。介面明確提供「跟隨 Strata」，將手動覆寫放在「進階設定」，並保留上次同步結果。
 
 ## 功能
 
@@ -20,7 +20,7 @@ UI 支援 English、简体中文、繁體中文。自動跟隨 DSH 介面語言�
 - 使用 DSH 原生請求對應，同時設定是否思考及推理等級。範本未知或無法取得 props 時，保留原推理設定並顯示原因。
 - 不修改供應者預設等級或目前對話選擇。供應者預設值與已驗證選項衝突時，跳過推理同步並提示。同步後請開新對話。
 
-詳見[能力驗證與對應表](docs/CAPABILITIES.md)。不新增其他外掛、不修改 Strata 設定。
+詳見[能力驗證與對應表](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/CAPABILITIES.md)。不新增其他外掛、不修改 Strata 設定。
 
 ### 既有同步功能
 
@@ -36,7 +36,15 @@ UI 支援 English、简体中文、繁體中文。自動跟隨 DSH 介面語言�
 
 ## 安裝與使用
 
-需要 Node.js 22 或更新版本：
+先完成工作並完全結束 DSH Desktop，再使用官方 DSH CLI 從 npm 官方 registry 安裝：
+
+```sh
+dsh plugin --profile desktop add @ethan741205/dsh-strata-sync --registry=https://registry.npmjs.org/
+```
+
+完成後重新開啟 DSH。首次安裝會自動選取 bundle；已安裝但停用的 bundle 需在外掛管理員重新啟用。
+
+如需從原始碼建置，請使用 Node.js 22 或更新版本：
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -44,10 +52,10 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.7.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.7.1.tgz
 ```
 
-執行最後一行前，先完成工作並完全結束 DSH Desktop，再使用官方 CLI 安裝，完成後重新開啟。在其他目錄執行時，請使用套件的絕對路徑。首次安裝會自動選取 bundle；已安裝但停用的 bundle 需在外掛管理員重新啟用。
+執行最後一行前同樣需要完全結束 DSH Desktop，安裝完成後重新開啟。在其他目錄執行時，請使用套件的絕對路徑。
 
 先在 DSH 模型設定建立 Strata 供應者，再開啟 **設定 → Strata Sync**：
 
@@ -109,6 +117,6 @@ ConfigEditor 負責個別原子寫入與熱載入；跨多項設定採補償回�
 
 `src/plugin.mjs` 為宿主外掛，`src/client.js` 為原生 ModuleLoader/React UI，`src/core.mjs` 負責資訊讀取與純預算計算。執行 `npm test`、`npm run build`、`npm pack --dry-run` 驗證。套件只包含原創外掛程式，不包含私人應用程式原始碼、認證或對話。
 
-0.7.0 的 94 項自動測試全部通過，包含 29 項新增回歸測試，涵蓋並行修改、多視窗偏好衝突、工作完成後補做啟動同步、別名與非文字生成模型、模型目錄相容性、延遲回應及同步結果保留。測試使用模擬服務，不產生模型回答。驗證範圍與原生宿主測試見 [VALIDATION](docs/VALIDATION.md)。參考：[DSH 壓縮文件](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md)、[Strata](https://github.com/Niko1221/Strata)。
+0.7.0 的執行程式已通過全部 94 項自動測試，包含 29 項新增回歸測試，涵蓋並行修改、多視窗偏好衝突、工作完成後補做啟動同步、別名與非文字生成模型、模型目錄相容性、延遲回應及同步結果保留。0.7.1 沿用相同執行程式，修正發布包裝。測試使用模擬服務，不產生模型回答。驗證範圍與原生宿主測試見 [VALIDATION](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/VALIDATION.md)。參考：[DSH 壓縮文件](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md)、[Strata](https://github.com/Niko1221/Strata)。
 
 MIT 授權。

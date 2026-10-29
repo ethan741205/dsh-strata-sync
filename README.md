@@ -1,12 +1,12 @@
 # DSH Strata Sync
 
-**English** · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
+**English** · [简体中文](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/README.zh-CN.md) · [繁體中文](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/README.zh-TW.md)
 
 A plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded by **Strata Server**, using a native DSH settings UI.
 
 Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts. The interface and README are available in English, Simplified Chinese and Traditional Chinese. The interface automatically follows DSH’s language, including live changes. DSH `zh` uses Simplified Chinese; `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` use Traditional Chinese. Other languages fall back to English. There is no separate language preference. Unknown backend diagnostics retain their original text for troubleshooting.
 
-Version 0.7.0 protects concurrent edits, completes startup sync after an intervening task, and correctly distinguishes model aliases and image-generation endpoints. The settings page makes **Follow Strata** explicit, moves manual output overrides into **Advanced settings**, and retains the last sync result. Unknown capabilities are clearly listed as preserved rather than fully verified.
+Version 0.7.1 fixes npm README selection and documentation packaging, adds registry installation instructions, and completes package metadata. Synchronization behavior is unchanged from 0.7.0: concurrent edits are protected, startup sync resumes after an intervening task, and model aliases and image-generation endpoints are distinguished correctly. The settings page makes **Follow Strata** explicit, keeps manual overrides under **Advanced settings**, and retains the last sync result.
 
 ## What it does
 
@@ -20,7 +20,7 @@ The preview includes **Input types**, **Reasoning levels**, and **Reasoning requ
 - Native DSH request mapping sends both thinking enablement and the selected effort. Unknown templates or unavailable props preserve existing reasoning settings and show a warning.
 - Provider defaults and current conversation selections are not changed. An incompatible provider default skips reasoning synchronization with a warning. Start a new conversation after syncing.
 
-See [capability evidence and exact mappings](docs/CAPABILITIES.md). No additional plugin or Strata server changes are required.
+See [capability evidence and exact mappings](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/CAPABILITIES.md). No additional plugin or Strata server changes are required.
 
 ### Existing synchronization features
 
@@ -47,7 +47,15 @@ The startup idle-wait scheduler includes a narrow DSH 0.2.1-rc.3 compatibility a
 
 ## Install
 
-Clone and build with Node.js 22 or newer:
+Finish active tasks and fully quit DSH Desktop, then install from the public npm registry with the official DSH CLI:
+
+```sh
+dsh plugin --profile desktop add @ethan741205/dsh-strata-sync --registry=https://registry.npmjs.org/
+```
+
+Reopen DSH after installation. The bundle is automatically selected on its first installation; an already installed but disabled bundle must be enabled in DSH's plugin manager.
+
+To build from source instead, use Node.js 22 or newer:
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -55,12 +63,10 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.7.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.7.1.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
-
-For the desktop profile, fully quit DSH Desktop before using the CLI installer, then reopen it. The bundle is automatically selected on its first installation; an already installed but disabled bundle must be enabled in DSH's plugin manager.
 
 Then open **Settings → Strata Sync**:
 
@@ -135,7 +141,7 @@ npm run build
 npm pack --dry-run
 ```
 
-All 94 automated tests pass for 0.7.0, including 29 new regression tests for concurrent edits, multi-window preference conflicts, busy-to-idle startup deferral, aliases and non-text generators, catalog compatibility, delayed responses and retained UI results. Existing tests cover credentials/redirect safety, budgets, rollback, HMR deduplication, preset activation and request mappings. Tests use simulated endpoints and DSH services; they do not generate model responses. See [validation notes](docs/VALIDATION.md) for the verified version and the isolated native-host checks.
+The 0.7.0 runtime passed all 94 automated tests, including 29 new regression tests for concurrent edits, multi-window preference conflicts, busy-to-idle startup deferral, aliases and non-text generators, catalog compatibility, delayed responses and retained UI results. Version 0.7.1 keeps that runtime unchanged and corrects release packaging. Existing tests cover credentials/redirect safety, budgets, rollback, HMR deduplication, preset activation and request mappings. Tests use simulated endpoints and DSH services; they do not generate model responses. See [validation notes](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/VALIDATION.md) for the verified version and the isolated native-host checks.
 
 References: [DSH compaction documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md), [Strata](https://github.com/Niko1221/Strata).
 

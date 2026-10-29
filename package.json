@@ -1,6 +1,6 @@
 {
   "name": "@ethan741205/dsh-strata-sync",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Native DSH settings UI for synchronizing Strata Server models, context and compaction budgets",
   "type": "module",
   "main": "dist/index.js",
@@ -14,14 +14,15 @@
     "dist",
     "cordis.patch.yml",
     "README.md",
-    "README.zh-TW.md",
-    "README.zh-CN.md",
+    "docs/*.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "verify:package": "node scripts/verify-package.mjs",
+    "prepublishOnly": "npm test"
   },
   "engines": {
     "node": ">=22"
@@ -45,6 +46,7 @@
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "1.1.0",
+    "@npmcli/package-json": "7.0.5",
     "jsdom": "26.1.0",
     "react": "18.3.1",
     "react-dom": "18.3.1"
@@ -52,6 +54,22 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/ethan741205/dsh-strata-sync.git"
+  },
+  "homepage": "https://github.com/ethan741205/dsh-strata-sync#readme",
+  "bugs": {
+    "url": "https://github.com/ethan741205/dsh-strata-sync/issues"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "strata",
+    "llm",
+    "plugin",
+    "model-sync"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "license": "MIT"
 }
