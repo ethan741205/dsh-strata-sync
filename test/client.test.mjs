@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { JSDOM } from 'jsdom';
+import { DEFAULT_SUMMARY_TEMPLATE } from '../src/summary.mjs';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' });
 globalThis.window = dom.window;
@@ -17,7 +18,8 @@ const source = fs.readFileSync(new URL('../src/client.js', import.meta.url), 'ut
 
 function status(overrides = {}) {
   return { providerId: 'strata', providers: [{ id: 'strata', apiKey: 'secret-that-must-not-render' }],
-    outputTokens: null, autoSync: false, followLoadedModel: true, busy: false, settingsRevision: 'prefs-1', ...overrides };
+    outputTokens: null, autoSync: false, followLoadedModel: true, busy: false, settingsRevision: 'prefs-1',
+    summaryPromptTemplate:DEFAULT_SUMMARY_TEMPLATE,defaultSummaryPromptTemplate:DEFAULT_SUMMARY_TEMPLATE,...overrides };
 }
 function preview(overrides = {}) {
   return { fingerprint: 'preview-one', busy: false,
@@ -88,10 +90,17 @@ async function mount({ initial = status(), previewResult = preview(), failEndpoi
         input.dispatchEvent(new window.Event('input', { bubbles: true }));
       });
     },
-    async setDivisor(value) {
-      const input=container.querySelector('[data-testid="summary-divisor"]');
+    async setDivisor(value,testid='summary-divisor') {
+      const input=container.querySelector(`[data-testid="${testid}"]`);
       await act(async()=>{
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(input,value);
+        input.dispatchEvent(new window.Event('input',{bubbles:true}));
+      });
+    },
+    async setPrompt(value) {
+      const input=container.querySelector('[data-testid="summary-prompt"]');
+      await act(async()=>{
+        Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set.call(input,value);
         input.dispatchEvent(new window.Event('input',{bubbles:true}));
       });
     },
@@ -119,9 +128,10 @@ test('summary guidance defaults on with divisor 16 and preview does not write pr
   const ui=await mount();t.after(()=>ui.unmount());
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.match(card.textContent,/Dynamic summary target/);
-  assert.match(card.textContent,/appends one sentence/);
+  assert.match(card.textContent,/Appended to DSH's native prompt/);
   assert.match(card.textContent,/not a guaranteed length or an optimal value/);
-  assert.equal(card.querySelectorAll('input,select,button').length,2);
+  assert.equal(card.querySelectorAll('input,select,button,textarea').length,6);
+  assert.equal(card.querySelector('textarea').value,DEFAULT_SUMMARY_TEMPLATE);
   assert.equal(card.querySelector('[data-testid="summary-guidance-toggle"]').checked,true);
   assert.equal(card.querySelector('[data-testid="summary-divisor"]').value,'16');
   assert.match(card.textContent,/Turning this off keeps DSH's native summary and automatic compaction behavior/);
@@ -191,10 +201,10 @@ test('preview below the summary target minimum shows native fallback in all loca
 
 test('invalid divisors produce local errors and cannot be saved or sent to preview',async t=>{
   const ui=await mount();t.after(()=>ui.unmount());
-  for(const value of ['','0','-1','1.5','9007199254740992']){
+  for(const value of ['','0','-1','0.5','9007199254740992']){
     await ui.setDivisor(value);
     assert.equal(ui.container.querySelector('[data-testid="summary-divisor"]').getAttribute('aria-invalid'),'true');
-    assert.match(ui.container.querySelector('[role="alert"]').textContent,/positive whole-number divisor/);
+    assert.match(ui.container.querySelector('[role="alert"]').textContent,/finite divisor of at least 1/);
     assert.equal(ui.button('Save preferences').disabled,true);
     assert.equal(ui.button('Check differences').disabled,true);
     await ui.click(ui.button('Save preferences'));
@@ -210,9 +220,9 @@ test('summary toggle, divisor and validation follow all three DSH locales',async
   const ui=await mount();t.after(()=>ui.unmount());
   await ui.setDivisor('0');
   for(const [locale,toggle,divisor,error]of [
-    ['en','Enable summary guidance','Context divisor (context ÷ N)','Enter a positive whole-number divisor'],
-    ['zh-Hant','啟用摘要提示補充','上下文除數（上下文 ÷ N）','請輸入正整數除數'],
-    ['zh-Hans','启用摘要提示补充','上下文除数（上下文 ÷ N）','请输入正整数除数']]){
+    ['en','Enable summary guidance','Context divisor (context ÷ N)','Enter a finite divisor of at least 1'],
+    ['zh-Hant','啟用摘要提示補充','上下文除數（上下文 ÷ N）','請輸入大於或等於 1'],
+    ['zh-Hans','启用摘要提示补充','上下文除数（上下文 ÷ N）','请输入大于或等于 1']]){
     await ui.changeLanguage(locale);
     assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').getAttribute('aria-label'),toggle);
     assert.equal(ui.container.querySelector('[data-testid="summary-divisor"]').getAttribute('aria-label'),divisor);
@@ -243,14 +253,14 @@ test('summary guidance follows DSH Chinese locales without changing preferences'
   await ui.changeLanguage('zh-Hans');
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.match(card.textContent,/动态摘要目标/);
-  assert.match(card.textContent,/后补充一句/);
+  assert.match(card.textContent,/附加于 DSH 原生提示词/);
   assert.match(card.textContent,/本次预览的目标上限：2,048 tokens/);
   assert.match(card.textContent,/不代表最佳值/);
   assert.match(card.textContent,/已有模型窗口的较小值/);
   assert.match(card.textContent,/无法估算图片／文件附件用量/);
   await ui.changeLanguage('zh-Hant');
   assert.match(card.textContent,/動態摘要目標/);
-  assert.match(card.textContent,/後補充一句/);
+  assert.match(card.textContent,/附加於 DSH 原生提示詞/);
   assert.match(card.textContent,/本次預覽的目標上限：2,048 tokens/);
   assert.match(card.textContent,/系統提示詞與工具定義/);
   assert.match(card.textContent,/既有模型視窗的較小值/);
@@ -265,6 +275,107 @@ test('summary preview omits a numeric ceiling when its inputs are unavailable', 
   assert.equal(card.querySelector('[data-testid="summary-target-ceiling"]'),null);
   assert.match(card.textContent,/DSH uses its original prompt/);
   assert.doesNotMatch(card.textContent,/NaN|undefined|Infinity/);
+});
+
+test('compact summary card displays the exact editable prompt and hides detailed explanations',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  const card=ui.container.querySelector('[data-testid="summary-target"]');
+  const editor=card.querySelector('[data-testid="summary-prompt"]');
+  const details=card.querySelector('[data-testid="summary-details"]');
+  assert.equal(editor.value,DEFAULT_SUMMARY_TEMPLATE);
+  assert.equal(editor.closest('details'),null);
+  assert.equal(details.open,false);
+  assert.equal(card.querySelectorAll(':scope > p').length,1);
+  assert.equal(card.querySelector('[data-testid="summary-output-divisor"]').closest('details'),details);
+  assert.equal(card.querySelector('[data-testid="summary-source-divisor"]').closest('details'),details);
+  assert.equal(ui.button('Restore default prompt').disabled,true);
+});
+
+test('custom prompt saves literally, survives locale changes and can reset independently',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  const custom='請在 {target} tokens 內摘要。 Keep <img src=x onerror=alert(1)> as plain text.';
+  await ui.setPrompt(custom);
+  assert.equal(ui.button('Check differences').disabled,true);
+  assert.equal(ui.container.querySelector('[data-testid="summary-target"] img'),null);
+  await ui.click(ui.button('Save preferences'));
+  assert.deepEqual(JSON.parse(JSON.stringify(ui.calls.find(call=>call.name==='configure').payload)),{
+    summaryPromptTemplate:custom,expectedRevision:'prefs-1',
+  });
+  for(const [locale,label,reset]of [
+    ['en','Supplemental summary prompt','Restore default prompt'],
+    ['zh-Hant','摘要補充提示詞','還原預設提示詞'],
+    ['zh-Hans','摘要补充提示词','恢复默认提示词']]){
+    await ui.changeLanguage(locale);
+    const editor=ui.container.querySelector('[data-testid="summary-prompt"]');
+    assert.equal(editor.value,custom);
+    assert.equal(editor.getAttribute('aria-label'),label);
+    assert.ok(ui.button(reset));
+  }
+  await ui.changeLanguage('en');
+  await ui.setDivisor('32');
+  await ui.click(ui.button('Restore default prompt'));
+  assert.equal(ui.container.querySelector('[data-testid="summary-prompt"]').value,DEFAULT_SUMMARY_TEMPLATE);
+  assert.equal(ui.container.querySelector('[data-testid="summary-divisor"]').value,'32');
+  assert.equal(ui.calls.filter(call=>call.name==='configure').length,1);
+  await ui.click(ui.button('Save preferences'));
+  assert.deepEqual(JSON.parse(JSON.stringify(ui.calls.filter(call=>call.name==='configure').at(-1).payload)),{
+    summaryContextDivisor:32,summaryPromptTemplate:DEFAULT_SUMMARY_TEMPLATE,expectedRevision:'prefs-1-saved',
+  });
+});
+
+test('invalid prompt templates are blocked locally in all locales without writes',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  for(const value of ['', 'No target placeholder.', '{Target}', '{target}'+ 'x'.repeat(2041)]){
+    await ui.setPrompt(value);
+    assert.equal(ui.container.querySelector('[data-testid="summary-prompt"]').getAttribute('aria-invalid'),'true');
+    assert.equal(ui.button('Save preferences').disabled,true);
+    assert.equal(ui.button('Check differences').disabled,true);
+    await ui.click(ui.button('Save preferences'));
+  }
+  for(const [locale,error]of [['en','include {target}'],['zh-Hant','並包含 {target}'],['zh-Hans','并包含 {target}']]){
+    await ui.changeLanguage(locale);
+    assert.ok(ui.container.querySelector('[role="alert"]').textContent.includes(error));
+  }
+  await ui.changeLanguage('en');
+  await ui.setPrompt('Keep {target} tokens.');
+  assert.equal(ui.container.querySelector('[role="alert"]'),null);
+  assert.equal(ui.button('Save preferences').disabled,false);
+  assert.equal(ui.calls.some(call=>call.name==='configure'||call.name==='preview'),false);
+});
+
+test('custom prompts participate in external preference conflicts',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  ui.setStatus({summaryPromptTemplate:'External {target}.',settingsRevision:'prefs-2'});await ui.poll();
+  assert.equal(ui.container.querySelector('[data-testid="summary-prompt"]').value,'External {target}.');
+  await ui.setPrompt('My local {target}.');
+  ui.setStatus({summaryPromptTemplate:'New external {target}.',settingsRevision:'prefs-3'});await ui.poll();
+  assert.equal(ui.container.querySelector('[data-testid="summary-prompt"]').value,'My local {target}.');
+  assert.equal(ui.button('Save preferences').disabled,true);
+  await ui.click(ui.button('Reload latest preferences'));
+  assert.equal(ui.container.querySelector('[data-testid="summary-prompt"]').value,'New external {target}.');
+});
+
+test('all three divisors accept decimals and the preview uses the custom output divisor',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  const pairs=[['summary-divisor','10.5'],['summary-output-divisor','1.5'],['summary-source-divisor','2.5']];
+  for(const [id,value]of pairs){
+    assert.equal(ui.container.querySelector(`[data-testid="${id}"]`).getAttribute('step'),'any');
+    await ui.setDivisor(value,id);
+    assert.equal(ui.container.querySelector(`[data-testid="${id}"]`).getAttribute('aria-invalid'),'false');
+  }
+  await ui.click(ui.button('Save preferences'));
+  assert.deepEqual(JSON.parse(JSON.stringify(ui.calls.find(call=>call.name==='configure').payload)),{
+    summaryContextDivisor:10.5,summaryOutputDivisor:1.5,summarySourceDivisor:2.5,expectedRevision:'prefs-1',
+  });
+  await ui.click(ui.button('Check differences'));
+  assert.match(ui.container.querySelector('[data-testid="summary-target-ceiling"]').textContent,/2,730 tokens/);
+  assert.equal(ui.container.querySelector('[data-testid="summary-source-divisor"]').value,'2.5');
+  for(const id of ['summary-output-divisor','summary-source-divisor']){
+    await ui.setDivisor('0.5',id);
+    assert.equal(ui.button('Save preferences').disabled,true);
+    assert.equal(ui.container.querySelector(`[data-testid="${id}"]`).getAttribute('aria-invalid'),'true');
+    await ui.setDivisor('2',id);
+  }
 });
 
 test('dirty preferences must save before preview, and successful apply invalidates the preview', async t => {

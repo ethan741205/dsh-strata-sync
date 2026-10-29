@@ -87,6 +87,26 @@ window.__ModuleLoader__.load({
     "zh-Hant": "動態摘要目標",
     "zh-Hans": "动态摘要目标"
   },
+  "Supplemental summary prompt": {
+    "zh-Hant": "摘要補充提示詞",
+    "zh-Hans": "摘要补充提示词"
+  },
+  "Restore default prompt": {
+    "zh-Hant": "還原預設提示詞",
+    "zh-Hans": "恢复默认提示词"
+  },
+  "Appended to DSH's native prompt; {target} becomes the calculated token target. Save preferences to apply.": {
+    "zh-Hant": "附加於 DSH 原生提示詞；{target} 會替換為計算出的 token 目標。儲存偏好後套用。",
+    "zh-Hans": "附加于 DSH 原生提示词；{target} 会替换为计算出的 token 目标。保存偏好后应用。"
+  },
+  "Use 1–2,048 characters and include {target}.": {
+    "zh-Hant": "請輸入 1–2,048 個字元，並包含 {target}。",
+    "zh-Hans": "请输入 1–2,048 个字符，并包含 {target}。"
+  },
+  "Calculation and limits": {
+    "zh-Hant": "計算方式與限制",
+    "zh-Hans": "计算方式与限制"
+  },
   "How the target is calculated": {
     "zh-Hant": "目標如何計算",
     "zh-Hans": "目标如何计算"
@@ -95,9 +115,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "啟用後，在每次支援的 Strata 摘要請求前，計算長度目標，並在 DSH 原生摘要提示詞後補充一句。",
     "zh-Hans": "启用后，在每次支持的 Strata 摘要请求前，计算长度目标，并在 DSH 原生摘要提示词后补充一句。"
   },
-  "Target = floor(min(context / N, summary output limit / 2, selected content estimate / 2)).": {
-    "zh-Hant": "目標 = floor(min(上下文 / N, 摘要輸出上限 / 2, 待壓縮內容估算 / 2))。",
-    "zh-Hans": "目标 = floor(min(上下文 / N, 摘要输出上限 / 2, 待压缩内容估算 / 2))。"
+  "Target = floor(min(context / N, summary output limit / O, selected content estimate / S)).": {
+    "zh-Hant": "目標 = floor(min(上下文 / N, 摘要輸出上限 / O, 待壓縮內容估算 / S))。",
+    "zh-Hans": "目标 = floor(min(上下文 / N, 摘要输出上限 / O, 待压缩内容估算 / S))。"
   },
   "Enable summary guidance": {
     "zh-Hant": "啟用摘要提示補充",
@@ -111,13 +131,21 @@ window.__ModuleLoader__.load({
     "zh-Hant": "上下文除數（上下文 ÷ N）",
     "zh-Hans": "上下文除数（上下文 ÷ N）"
   },
-  "Default: 16. A smaller divisor allows a larger target, still bounded by half the summary output limit and half the selected content estimate.": {
-    "zh-Hant": "預設為 16。除數越小，允許的目標越大，但仍受摘要輸出上限的一半與待壓縮內容估算的一半限制。",
-    "zh-Hans": "默认为 16。除数越小，允许的目标越大，但仍受摘要输出上限的一半与待压缩内容估算的一半限制。"
+  "Summary output divisor (output limit ÷ O)": {
+    "zh-Hant": "摘要輸出除數（輸出上限 ÷ O）",
+    "zh-Hans": "摘要输出除数（输出上限 ÷ O）"
   },
-  "Enter a positive whole-number divisor.": {
-    "zh-Hant": "請輸入正整數除數。",
-    "zh-Hans": "请输入正整数除数。"
+  "Source length divisor (source estimate ÷ S)": {
+    "zh-Hant": "原文長度除數（原文估算 ÷ S）",
+    "zh-Hans": "原文长度除数（原文估算 ÷ S）"
+  },
+  "Defaults: N = 16, O = 2, S = 2. Smaller divisors allow longer targets; the smallest of the three bounds wins. Decimals are supported.": {
+    "zh-Hant": "預設 N = 16、O = 2、S = 2。除數越小，目標可越長；最後取三項限制的最小值。支援小數。",
+    "zh-Hans": "默认 N = 16、O = 2、S = 2。除数越小，目标可越长；最后取三项限制的最小值。支持小数。"
+  },
+  "Enter a finite divisor of at least 1; decimals are allowed.": {
+    "zh-Hant": "請輸入大於或等於 1 的有限除數，可使用小數。",
+    "zh-Hans": "请输入大于或等于 1 的有限除数，可使用小数。"
   },
   "This preview is below the 256-token minimum. The native summary prompt remains unchanged.": {
     "zh-Hant": "本次預覽低於 256 tokens 的最低目標，將保留原生摘要提示詞。",
@@ -371,7 +399,7 @@ window.__ModuleLoader__.load({
       model: 'Model', modelId: 'Model', defaultModel: 'Default model',
       thresholdRatio: 'Compaction ratio ceiling', retainRatio: 'Recent conversation retention ratio',
     };
-    const css = `.strata-sync{max-width:880px;color:inherit;font:inherit;line-height:1.6}.strata-sync *{box-sizing:border-box}.strata-sync header{border-bottom:1px solid #8884;padding-bottom:16px;margin-bottom:20px}.strata-sync h2{margin:0;font-size:22px}.strata-sync .ss-muted{opacity:.72;font-size:13px}.strata-sync .ss-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.strata-sync label{display:flex;flex-direction:column;gap:5px;font-size:14px}.strata-sync select,.strata-sync input[type=number]{padding:9px;border:1px solid #8886;border-radius:7px;background:transparent;color:inherit;width:100%}.strata-sync option{color:#17252b;background:#fff}.strata-sync button{padding:9px 15px;border:1px solid #8885;border-radius:7px;background:transparent;color:inherit;cursor:pointer}.strata-sync button.primary{background:#126c65;border-color:#126c65;color:#fff}.strata-sync button:disabled{opacity:.45;cursor:default}.strata-sync .ss-actions{display:flex;gap:9px;flex-wrap:wrap;margin:18px 0}.strata-sync .ss-check{display:flex;flex-direction:row;align-items:center;margin-top:13px}.strata-sync .ss-card{padding:16px;border:1px solid #8884;border-radius:9px;margin:16px 0}.strata-sync .ss-status{padding:10px 13px;border-left:3px solid #21867b;background:#21867b12;margin:13px 0;overflow-wrap:anywhere}.strata-sync .ss-error{border-color:#ce7140;background:#ce714012}.strata-sync table{width:100%;border-collapse:collapse;font-size:14px}.strata-sync td,.strata-sync th{padding:9px 8px;text-align:left;border-bottom:1px solid #8883;overflow-wrap:anywhere}.strata-sync code{font-size:12px;overflow-wrap:anywhere}.strata-sync .ss-scroll{overflow-x:auto;container-type:inline-size;border:1px solid #8883;border-radius:8px;margin-top:16px}.strata-sync table{table-layout:fixed}.strata-sync th,.strata-sync td{vertical-align:top;padding:12px;line-height:1.5}.strata-sync thead th{font-size:12px;font-weight:600;background:#8881}.strata-sync th:first-child{width:34%}.strata-sync thead th:not(:first-child){width:33%;text-align:right}.strata-sync tbody th{font-weight:500}.strata-sync tbody tr:last-child>*{border-bottom:0}.strata-sync .ss-before,.strata-sync .ss-after{text-align:right;font-variant-numeric:tabular-nums}.strata-sync .ss-before{color:inherit;opacity:.7}.strata-sync .ss-after{background:#21867b0b;font-weight:600}.strata-sync .ss-target{display:block;font-size:11px;font-weight:400;opacity:.65;margin-top:5px;overflow-wrap:anywhere}.strata-sync .ss-values{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.strata-sync .ss-chip{display:inline-block;padding:2px 7px;border:1px solid #8883;border-radius:5px;font-size:12px;font-weight:400;max-width:100%;overflow-wrap:anywhere}.strata-sync .ss-details{text-align:left;font-weight:400;font-size:12px}.strata-sync .ss-details summary{cursor:pointer;overflow-wrap:anywhere}.strata-sync .ss-details pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0;font-size:11px;line-height:1.5}.strata-sync .ss-empty{font-weight:400;font-size:12px;opacity:.65}@container(max-width:440px){.strata-sync tbody th:first-child{width:100%}.strata-sync table,.strata-sync tbody,.strata-sync tr,.strata-sync tbody th,.strata-sync td{display:block;width:100%}.strata-sync thead{display:none}.strata-sync tbody tr{padding:10px 12px;border-bottom:1px solid #8883}.strata-sync tbody th,.strata-sync td{border:0;padding:5px 0}.strata-sync td::before{content:attr(data-label);float:left;font-size:12px;font-weight:400;opacity:.7}.strata-sync td{display:flow-root;padding:7px}.strata-sync .ss-values{max-width:72%;margin-left:auto}.strata-sync .ss-details{margin-top:24px}}`;
+    const css = `.strata-sync{max-width:880px;color:inherit;font:inherit;line-height:1.6}.strata-sync *{box-sizing:border-box}.strata-sync header{border-bottom:1px solid #8884;padding-bottom:16px;margin-bottom:20px}.strata-sync h2{margin:0;font-size:22px}.strata-sync .ss-muted{opacity:.72;font-size:13px}.strata-sync .ss-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.strata-sync label{display:flex;flex-direction:column;gap:5px;font-size:14px}.strata-sync select,.strata-sync input[type=number],.strata-sync textarea{padding:9px;border:1px solid #8886;border-radius:7px;background:transparent;color:inherit;width:100%}.strata-sync textarea{resize:vertical;min-height:112px;font:inherit;line-height:1.5}.strata-sync .ss-prompt-label{margin:12px 0 8px}.strata-sync option{color:#17252b;background:#fff}.strata-sync button{padding:9px 15px;border:1px solid #8885;border-radius:7px;background:transparent;color:inherit;cursor:pointer}.strata-sync button.primary{background:#126c65;border-color:#126c65;color:#fff}.strata-sync button:disabled{opacity:.45;cursor:default}.strata-sync .ss-actions{display:flex;gap:9px;flex-wrap:wrap;margin:18px 0}.strata-sync .ss-check{display:flex;flex-direction:row;align-items:center;margin-top:13px}.strata-sync .ss-card{padding:16px;border:1px solid #8884;border-radius:9px;margin:16px 0}.strata-sync .ss-status{padding:10px 13px;border-left:3px solid #21867b;background:#21867b12;margin:13px 0;overflow-wrap:anywhere}.strata-sync .ss-error{border-color:#ce7140;background:#ce714012}.strata-sync table{width:100%;border-collapse:collapse;font-size:14px}.strata-sync td,.strata-sync th{padding:9px 8px;text-align:left;border-bottom:1px solid #8883;overflow-wrap:anywhere}.strata-sync code{font-size:12px;overflow-wrap:anywhere}.strata-sync .ss-scroll{overflow-x:auto;container-type:inline-size;border:1px solid #8883;border-radius:8px;margin-top:16px}.strata-sync table{table-layout:fixed}.strata-sync th,.strata-sync td{vertical-align:top;padding:12px;line-height:1.5}.strata-sync thead th{font-size:12px;font-weight:600;background:#8881}.strata-sync th:first-child{width:34%}.strata-sync thead th:not(:first-child){width:33%;text-align:right}.strata-sync tbody th{font-weight:500}.strata-sync tbody tr:last-child>*{border-bottom:0}.strata-sync .ss-before,.strata-sync .ss-after{text-align:right;font-variant-numeric:tabular-nums}.strata-sync .ss-before{color:inherit;opacity:.7}.strata-sync .ss-after{background:#21867b0b;font-weight:600}.strata-sync .ss-target{display:block;font-size:11px;font-weight:400;opacity:.65;margin-top:5px;overflow-wrap:anywhere}.strata-sync .ss-values{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.strata-sync .ss-chip{display:inline-block;padding:2px 7px;border:1px solid #8883;border-radius:5px;font-size:12px;font-weight:400;max-width:100%;overflow-wrap:anywhere}.strata-sync .ss-details{text-align:left;font-weight:400;font-size:12px}.strata-sync .ss-details summary{cursor:pointer;overflow-wrap:anywhere}.strata-sync .ss-details pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0;font-size:11px;line-height:1.5}.strata-sync .ss-empty{font-weight:400;font-size:12px;opacity:.65}@container(max-width:440px){.strata-sync tbody th:first-child{width:100%}.strata-sync table,.strata-sync tbody,.strata-sync tr,.strata-sync tbody th,.strata-sync td{display:block;width:100%}.strata-sync thead{display:none}.strata-sync tbody tr{padding:10px 12px;border-bottom:1px solid #8883}.strata-sync tbody th,.strata-sync td{border:0;padding:5px 0}.strata-sync td::before{content:attr(data-label);float:left;font-size:12px;font-weight:400;opacity:.7}.strata-sync td{display:flow-root;padding:7px}.strata-sync .ss-values{max-width:72%;margin-left:auto}.strata-sync .ss-details{margin-top:24px}}`;
     const fmt = (v) => v == null ? 'Not set' : typeof v === 'number' ? v.toLocaleString('en-US') : typeof v === 'object' ? JSON.stringify(v) : String(v);
     const warningText = {
 INPUT_UNCONFIRMED: 'Input types are missing or unsupported in server metadata. Existing input settings are preserved.',
@@ -399,19 +427,20 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       };
       const diagnostic = (message) => translations[message] ? t(message) : language === 'en' ? message : t('Server diagnostic: ') + message;
       const [state,setState] = React.useState(null), [preview,setPreview] = React.useState(null), [result,setResult] = React.useState(null);
-      const [form,setForm] = React.useState({providerId:'',output:'',manual:false,auto:false,follow:true,summaryGuidance:true,summaryDivisor:'16'});
+      const [form,setForm] = React.useState({providerId:'',output:'',manual:false,auto:false,follow:true,summaryGuidance:true,summaryDivisor:'16',summaryOutputDivisor:'2',summarySourceDivisor:'2',summaryPrompt:''});
       const [pending,setPending] = React.useState(false), [error,setError] = React.useState(''), [loadError,setLoadError] = React.useState('');
       const [notice,setNotice] = React.useState(''), [conflict,setConflict] = React.useState(false);
       const formRef=React.useRef(form), baseline=React.useRef(null), requestSeq=React.useRef(0), alive=React.useRef(true);
-      const values = (f) => ({providerId:f.providerId,outputTokens:f.manual ? (f.output.trim()==='' ? NaN : Number(f.output)) : null,autoSync:f.auto,followLoadedModel:f.follow,summaryGuidance:f.summaryGuidance,summaryContextDivisor:f.summaryDivisor.trim()===''?NaN:Number(f.summaryDivisor)});
-      const preferences = (s) => ({providerId:s.providerId || '',outputTokens:s.outputTokens ?? null,autoSync:!!s.autoSync,followLoadedModel:s.followLoadedModel !== false,summaryGuidance:s.summaryGuidance!==false,summaryContextDivisor:s.summaryContextDivisor??16});
+      const numberValue = value => value.trim()===''?NaN:Number(value);
+      const values = (f) => ({providerId:f.providerId,outputTokens:f.manual ? (f.output.trim()==='' ? NaN : Number(f.output)) : null,autoSync:f.auto,followLoadedModel:f.follow,summaryGuidance:f.summaryGuidance,summaryContextDivisor:numberValue(f.summaryDivisor),summaryOutputDivisor:numberValue(f.summaryOutputDivisor),summarySourceDivisor:numberValue(f.summarySourceDivisor),summaryPromptTemplate:f.summaryPrompt});
+      const preferences = (s) => ({providerId:s.providerId || '',outputTokens:s.outputTokens ?? null,autoSync:!!s.autoSync,followLoadedModel:s.followLoadedModel !== false,summaryGuidance:s.summaryGuidance!==false,summaryContextDivisor:s.summaryContextDivisor??16,summaryOutputDivisor:s.summaryOutputDivisor??2,summarySourceDivisor:s.summarySourceDivisor??2,summaryPromptTemplate:s.summaryPromptTemplate??s.defaultSummaryPromptTemplate??''});
       const equal = (a,b) => Object.keys(a).every(key=>Object.is(a[key],b[key]));
       const acceptStatus = React.useCallback((s,force=false) => {
         if (!alive.current) return;
         const next=preferences(s), old=baseline.current;
         const untouched=!old || equal(values(formRef.current),old.values);
         if (force || untouched) {
-          const nextForm={providerId:next.providerId,output:next.outputTokens==null?'':String(next.outputTokens),manual:next.outputTokens!=null,auto:next.autoSync,follow:next.followLoadedModel,summaryGuidance:next.summaryGuidance,summaryDivisor:String(next.summaryContextDivisor)};
+          const nextForm={providerId:next.providerId,output:next.outputTokens==null?'':String(next.outputTokens),manual:next.outputTokens!=null,auto:next.autoSync,follow:next.followLoadedModel,summaryGuidance:next.summaryGuidance,summaryDivisor:String(next.summaryContextDivisor),summaryOutputDivisor:String(next.summaryOutputDivisor),summarySourceDivisor:String(next.summarySourceDivisor),summaryPrompt:next.summaryPromptTemplate};
           formRef.current=nextForm; setForm(nextForm); setConflict(false);
           baseline.current={values:next,revision:s.settingsRevision};
         } else if (old.revision!==s.settingsRevision || !equal(old.values,next)) {
@@ -443,13 +472,15 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           else setError(e.code==='unsupported-route'?'This provider uses an unsupported model catalog configuration. Configure an explicit custom model list in DSH before syncing.':e.message||'The operation failed.');
         } finally { if(alive.current)setPending(false); }
       }
-      const draft=values(form), validDivisor=Number.isSafeInteger(draft.summaryContextDivisor)&&draft.summaryContextDivisor>0;
-      const valid=validDivisor&&(draft.outputTokens===null || Number.isSafeInteger(draft.outputTokens)&&draft.outputTokens>0);
+      const draft=values(form), isDivisor=value=>Number.isFinite(value)&&value>=1&&value<=Number.MAX_SAFE_INTEGER;
+      const validDivisor=[draft.summaryContextDivisor,draft.summaryOutputDivisor,draft.summarySourceDivisor].every(isDivisor);
+      const validPrompt=typeof draft.summaryPromptTemplate==='string'&&draft.summaryPromptTemplate.length>0&&draft.summaryPromptTemplate.length<=2048&&draft.summaryPromptTemplate.includes('{target}');
+      const valid=validDivisor&&validPrompt&&(draft.outputTokens===null || Number.isSafeInteger(draft.outputTokens)&&draft.outputTokens>0);
       const dirty=!!baseline.current&&!equal(draft,baseline.current.values);
       const displayedResult=!result || state?.lastApplied?.at>result.at ? state?.lastApplied : result;
       const activeBudget=preview?.budget;
       const summaryTargetCeiling=form.summaryGuidance&&validDivisor&&Number.isSafeInteger(activeBudget?.contextWindow)&&activeBudget.contextWindow>0&&Number.isSafeInteger(activeBudget?.summaryMaxTokens)&&activeBudget.summaryMaxTokens>0
-        ? Math.floor(Math.min(activeBudget.contextWindow/draft.summaryContextDivisor,activeBudget.summaryMaxTokens/2)) : null;
+        ? Math.floor(Math.min(activeBudget.contextWindow/draft.summaryContextDivisor,activeBudget.summaryMaxTokens/draft.summaryOutputDivisor)) : null;
       const outputSource=(budget)=>t(({server:'Strata Server default',manual:'Manual override',calculated:'Automatic calculation'})[budget?.outputSource]||'Automatic calculation');
       const preserved=(view)=>{
         const status=view?.capabilityStatus;
@@ -494,18 +525,23 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         h('div',{className:'ss-card','data-testid':'summary-target'},
           h('strong',null,t('Dynamic summary target')),
           h('label',{className:'ss-check'},h('input',{type:'checkbox','data-testid':'summary-guidance-toggle','aria-label':t('Enable summary guidance'),checked:form.summaryGuidance,onChange:e=>edit({summaryGuidance:e.target.checked}),disabled:pending||!state}),t('Enable summary guidance')),
-          h('p',{className:'ss-muted'},t("Enabled by default. Turning this off keeps DSH's native summary and automatic compaction behavior.")),
-          h('label',null,t('Context divisor (context ÷ N)'),h('input',{type:'number','data-testid':'summary-divisor','aria-label':t('Context divisor (context ÷ N)'),'aria-invalid':!validDivisor,min:1,max:Number.MAX_SAFE_INTEGER,step:1,value:form.summaryDivisor,onChange:e=>edit({summaryDivisor:e.target.value}),disabled:pending||!state})),
-          state&&!validDivisor&&h('p',{className:'ss-status ss-error',role:'alert'},t('Enter a positive whole-number divisor.')),
-          h('p',{className:'ss-muted'},t('Default: 16. A smaller divisor allows a larger target, still bounded by half the summary output limit and half the selected content estimate.')),
-          h('p',{className:'ss-muted'},t('Save preferences to apply these controls to subsequent summary requests; other model and compaction settings stay unchanged.')),
+          h('label',null,t('Context divisor (context ÷ N)'),h('input',{type:'number','data-testid':'summary-divisor','aria-label':t('Context divisor (context ÷ N)'),'aria-invalid':!isDivisor(draft.summaryContextDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summaryDivisor,onChange:e=>edit({summaryDivisor:e.target.value}),disabled:pending||!state})),
+          state&&!validDivisor&&h('p',{className:'ss-status ss-error',role:'alert'},t('Enter a finite divisor of at least 1; decimals are allowed.')),
+          h('label',{className:'ss-prompt-label'},t('Supplemental summary prompt'),h('textarea',{'data-testid':'summary-prompt','aria-label':t('Supplemental summary prompt'),'aria-invalid':!validPrompt,rows:5,value:form.summaryPrompt,onChange:e=>edit({summaryPrompt:e.target.value}),disabled:pending||!state,spellCheck:false})),
+          state&&!validPrompt&&h('p',{className:'ss-status ss-error',role:'alert'},t('Use 1–2,048 characters and include {target}.')),
+          h('button',{type:'button','data-testid':'summary-prompt-reset',disabled:pending||!state?.defaultSummaryPromptTemplate||form.summaryPrompt===state.defaultSummaryPromptTemplate,onClick:()=>edit({summaryPrompt:state.defaultSummaryPromptTemplate})},t('Restore default prompt')),
+          h('p',{className:'ss-muted'},t("Appended to DSH's native prompt; {target} becomes the calculated token target. Save preferences to apply.")),
           !form.summaryGuidance&&h('p',{className:'ss-status','data-testid':'summary-guidance-off'},t('Summary guidance is off. No extra sentence is added to the native prompt.')),
-          h('p',null,t("When enabled, before each supported Strata summary, calculates a length target and appends one sentence to DSH's native summary prompt.")),
           summaryTargetCeiling!==null&&(summaryTargetCeiling>=256
             ? h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens')
             : h('p',{className:'ss-status','data-testid':'summary-target-native'},t('This preview is below the 256-token minimum. The native summary prompt remains unchanged.'))),
-          h('details',{className:'ss-details'},h('summary',null,t('How the target is calculated')),
-            h('p',{className:'ss-muted'},t('Target = floor(min(context / N, summary output limit / 2, selected content estimate / 2)).')),
+          h('details',{className:'ss-details','data-testid':'summary-details'},h('summary',null,t('Calculation and limits')),
+            h('div',{className:'ss-grid'},
+              h('label',null,t('Summary output divisor (output limit ÷ O)'),h('input',{type:'number','data-testid':'summary-output-divisor','aria-label':t('Summary output divisor (output limit ÷ O)'),'aria-invalid':!isDivisor(draft.summaryOutputDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summaryOutputDivisor,onChange:e=>edit({summaryOutputDivisor:e.target.value}),disabled:pending||!state})),
+              h('label',null,t('Source length divisor (source estimate ÷ S)'),h('input',{type:'number','data-testid':'summary-source-divisor','aria-label':t('Source length divisor (source estimate ÷ S)'),'aria-invalid':!isDivisor(draft.summarySourceDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summarySourceDivisor,onChange:e=>edit({summarySourceDivisor:e.target.value}),disabled:pending||!state}))),
+            h('p',{className:'ss-muted'},t("Enabled by default. Turning this off keeps DSH's native summary and automatic compaction behavior.")),
+            h('p',{className:'ss-muted'},t('Defaults: N = 16, O = 2, S = 2. Smaller divisors allow longer targets; the smallest of the three bounds wins. Decimals are supported.')),
+            h('p',{className:'ss-muted'},t('Target = floor(min(context / N, summary output limit / O, selected content estimate / S)).')),
             h('p',{className:'ss-muted'},t('Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.')),
             h('p',{className:'ss-muted'},t('The actual target may be lower for shorter content. System prompts and tool schemas are excluded from the content estimate.')),
             h('p',{className:'ss-muted'},t('The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.')),

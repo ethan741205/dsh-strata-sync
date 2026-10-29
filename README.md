@@ -6,36 +6,46 @@ A plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded b
 
 Open **Settings → dsh-strata-sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts. The interface and README are available in English, Simplified Chinese and Traditional Chinese. The interface automatically follows DSH’s language, including live changes. DSH `zh` uses Simplified Chinese; `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` use Traditional Chinese. Other languages fall back to English. There is no separate language preference. Unknown backend diagnostics retain their original text for troubleshooting.
 
-Version 0.9.0 adds a **default-on summary guidance switch** and an adjustable **context divisor** to the settings page. When enabled, the plugin calculates a dynamic length target before each supported Strata summary and appends **one sentence** to DSH's native summary prompt. The original prompt, output cap and other settings remain unchanged. Existing synchronization safeguards, startup behavior, capability verification and backups are retained.
+Version 0.10.0 simplifies the summary settings and makes the supplemental prompt editable. Keep the default template or customize it with the dynamic `{target}` placeholder; DSH's native prompt and output cap remain unchanged.
 
 ## What it does
 
 ### Dynamic summary guidance
 
-Summary guidance is enabled by default. For supported Strata routes, the plugin calculates a fresh writing target for each native DSH summary request:
+The compact **Dynamic summary target** card contains the enable switch, context divisor and editable **Supplemental summary prompt**. Expand **Calculation and limits** for the summary-output and source-length divisors, formula and limitations. Guidance is enabled by default; turning it off preserves DSH's native summary and automatic compaction.
+
+The editor shows the actual template appended to the native prompt. Its default is:
 
 ```text
-context = min(verified Strata context, existing DSH model context)
-divisor = summaryContextDivisor (default: 16)
-target = floor(min(context / divisor,
-                   actual summary maxTokens / 2,
-                   selected-content estimated tokens / 2))
+Keep the entire checkpoint, including all required headings, within a target of {target} tokens by retaining only information essential to continue the remaining work, consolidating prior summaries, and removing redundant or obsolete details.
 ```
 
-The selected-content estimate covers only the conversation span being replaced, including any prior checkpoint in that span. It excludes the system prompt and tool schemas. Before each summary, read-only metadata queries verify Strata's loaded model and context; the current summary request supplies its actual output cap. The calculation uses the smaller of verified server context and the existing DSH model context, so a larger server window never silently expands a smaller client budget. The target is calculated at summary time, not fixed when DSH starts or when settings are synchronized.
-
-With the default divisor of 16, a 4,096-token summary output cap and enough source content, 32K context gives a target of **2,048 tokens**, and 64K gives **2,048 tokens**. Shorter content lowers the target. **Settings → dsh-strata-sync** shows the formula and the maximum target for a preview; it cannot know the exact target of a future summary.
-
-In the **Dynamic summary target** card, toggle **Enable summary guidance** and set **Context divisor (context ÷ N)** to a positive safe integer. A smaller divisor allows a larger target; the summary-output and source-content bounds still apply. For example, with 32K context, a 4,096-token summary cap and enough content, divisors 32, 16 and 8 produce targets of 1,024, 2,048 and 2,048 tokens respectively. Click **Save preferences** to apply your choice to subsequent supported summary requests. Saving these controls does not synchronize model budgets or change Strata Server settings.
+Keep the literal `{target}` placeholder in your template; each occurrence is replaced with the target calculated for that summary. Templates may contain up to 2,048 characters. Replacement is plain text, not executable code. **Restore default prompt** restores the original English template in the editor; click **Save preferences** to apply edits or the restored default. Changing the interface language does not translate or overwrite the saved template. This edits only the supplement, never DSH's original summary instructions.
 
 | Plugin preference | Default | Meaning |
 |---|---:|---|
-| `summaryGuidance` | `true` | Append the length-guidance sentence when the request is supported. Turning it off preserves DSH's native summary and automatic compaction. |
-| `summaryContextDivisor` | `16` | Divide the verified context by this positive safe integer when calculating the target. |
+| `summaryGuidance` | `true` | Append guidance to supported summary requests. |
+| `summaryContextDivisor` | `16` | Divide the verified context by this value. |
+| `summaryOutputDivisor` | `2` | Divide the actual summary output cap by this value. |
+| `summarySourceDivisor` | `2` | Divide the estimated source length by this value. |
+| `summaryPromptTemplate` | English template above | Supplement appended after substituting `{target}`. |
 
-Exactly one supplemental English sentence asks the model to meet that target, retain information needed to continue the remaining work, consolidate prior summaries and remove redundant or obsolete details. The native instructions, eight-section format and existing request options are preserved. The target is a heuristic writing instruction, **not a new hard output limit, an optimal value, or a guarantee against truncation**. No automatic retry loop or extra inference request is added.
+All three divisors accept finite numbers of at least 1, including decimals such as 1.5 or 2.5. A larger divisor makes its bound smaller. The final target is the smallest of the three bounds, rounded down; these controls do not change the actual output hard limit.
 
-If the route, required metadata or native summary format cannot be verified, or image/file attachment pricing cannot be estimated safely, the original DSH request is passed through unchanged. A cancelled request, disabled guidance or disabled plugin also preserves native handling. Calculated targets below 256 tokens leave the native prompt unchanged, rather than imposing an impractically small target for eight sections; the plugin does not cancel the summary or replace content with an empty checkpoint. Disabling the guidance or removing this plugin removes the supplemental sentence; it does not rewrite saved conversation history.
+For each supported summary:
+
+```text
+context = min(verified Strata context, existing DSH model context)
+target = floor(min(context / summaryContextDivisor,
+                   actual summary maxTokens / summaryOutputDivisor,
+                   selected-content estimated tokens / summarySourceDivisor))
+```
+
+The source estimate covers the conversation span being replaced, including prior checkpoints in that span, but excludes system prompts and tool schemas. Read-only metadata queries verify the loaded model and context; the current request supplies its actual output cap. With 32K context, a 4,096-token summary cap and enough content, context divisors 32, 16 and 8 produce targets of 1,024, 2,048 and 2,048 tokens. The UI preview is a ceiling, not the actual target of a future request.
+
+Saving these controls changes only plugin preferences; it does not synchronize model budgets or change Strata Server settings. DSH's native prompt, eight-section format and request options remain intact. The default supplement is one sentence; a custom template is appended as entered. The target is a writing instruction, **not a new hard output limit or a guarantee against truncation**. No retry loop or extra inference request is added.
+
+Unverified routes/metadata, unknown native prompts, unpriced attachments, invalid templates, cancellation, disabled guidance and targets below 256 tokens leave the native request unchanged. Removing the plugin stops the supplement without rewriting saved conversation history.
 
 ### Automatic model capabilities (0.4.0)
 
@@ -85,7 +95,7 @@ dsh plugin --profile desktop add dsh-strata-sync --registry=https://registry.npm
 
 Reopen DSH after installation. The bundle is automatically selected on its first installation; an already installed but disabled bundle must be enabled in DSH's plugin manager.
 
-To install **0.9.0 with summary guidance controls** from source, use Node.js 22 or newer, finish active tasks and fully quit DSH Desktop before the final installation command:
+To install **0.10.0 with the editable summary prompt** from source, use Node.js 22 or newer, finish active tasks and fully quit DSH Desktop before the final installation command:
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -93,7 +103,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./dsh-strata-sync-0.9.0.tgz
+dsh plugin --profile desktop add ./dsh-strata-sync-0.10.0.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
@@ -106,9 +116,15 @@ Then open **Settings → dsh-strata-sync**:
 4. Optionally enable **Automatically sync when DSH starts** and save. It defaults to off and takes effect on the next start. Existing `autoSync: true` preferences now use startup behavior.
 5. Start a new conversation to use the new Agent preset revision.
 
-The **Dynamic summary target** card is independent of model synchronization. Leave its guidance enabled and divisor at 16 to retain the previous behavior, or change these preferences and save. Turning this switch off does not disable DSH's own compaction.
+The **Dynamic summary target** card is independent of model synchronization. Leave guidance enabled, keep the default template, and use divisors 16 / 2 / 2 to retain the previous behavior, or change these preferences and save. Turning this switch off does not disable DSH's own compaction.
 
 No API key needs to be copied into this plugin. Set up or repair credentials in DSH Models settings.
+
+## Changes in 0.10.0
+
+- Makes the actual supplemental prompt editable, with a dynamic `{target}` placeholder and Restore default prompt action.
+- Simplifies the summary card and moves detailed formula explanations into expandable help in all three languages. Adds advanced output/source divisors and decimal support for all three divisors.
+- Validates and saves prompt edits through existing backup and revision safeguards without changing native instructions or other budgets.
 
 ## Changes in 0.9.0
 

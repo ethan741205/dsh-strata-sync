@@ -1,28 +1,34 @@
-/** A one-sentence, per-request supplement to DSH's native summary instruction. */
+/** An editable, per-request supplement to DSH's native summary instruction. */
 const NATIVE_OPENING = 'You are now acting as a compaction engine for this AI coding assistant.';
 const NATIVE_HEADINGS = ['Primary Request and Intent', 'Key Technical Concepts', 'Files and Code',
   'Errors and Fixes', 'Pending Jobs', 'Current Work', 'Next Step', 'Critical Context'];
 const GUIDANCE_PREFIX = 'Keep the entire checkpoint, including all required headings, within a target of ';
 const positive = value => Number.isSafeInteger(value) && value > 0;
+export const validSummaryDivisor = value => typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= Number.MAX_SAFE_INTEGER;
+export const DEFAULT_SUMMARY_TEMPLATE = `${GUIDANCE_PREFIX}{target} tokens by retaining only information essential to continue the remaining work, consolidating prior summaries, and removing redundant or obsolete details.`;
+export const validSummaryTemplate = value => typeof value === 'string' && value.length <= 2048 && value.includes('{target}');
+// Share identity across hot reloads/copies without adding fields to native requests.
+const augmentedMessages = globalThis[Symbol.for('dsh-strata-sync/summary-augmented')] ??= new WeakSet();
 // Eight mandatory headings need enough space for a meaningful checkpoint. Do
 // not round a tiny target UP; leave native behavior intact instead.
 export const MIN_SUMMARY_TARGET = 256;
 export const DEFAULT_SUMMARY_DIVISOR = 16;
 
-export function planSummaryTarget(contextWindow, summaryMaxTokens, sourceTokens, divisor = DEFAULT_SUMMARY_DIVISOR) {
-  if (![contextWindow, summaryMaxTokens, sourceTokens, divisor].every(positive)) return null;
-  const target = Math.floor(Math.min(contextWindow / divisor, summaryMaxTokens / 2, sourceTokens / 2));
+export function planSummaryTarget(contextWindow, summaryMaxTokens, sourceTokens, divisor = DEFAULT_SUMMARY_DIVISOR, outputDivisor = 2, sourceDivisor = 2) {
+  if (![contextWindow, summaryMaxTokens, sourceTokens].every(positive) || ![divisor, outputDivisor, sourceDivisor].every(validSummaryDivisor)) return null;
+  const target = Math.floor(Math.min(contextWindow / divisor, summaryMaxTokens / outputDivisor, sourceTokens / sourceDivisor));
   return target >= MIN_SUMMARY_TARGET ? target : null;
 }
 
-export function summaryInstruction(target) {
+export function summaryInstruction(target, template = DEFAULT_SUMMARY_TEMPLATE) {
   if (!positive(target)) throw new TypeError('A positive integer summary target is required.');
-  return `${GUIDANCE_PREFIX}${target} tokens by retaining only information essential to continue the remaining work, consolidating prior summaries, and removing redundant or obsolete details.`;
+  if (!validSummaryTemplate(template)) throw new TypeError('Summary prompt must include {target} and be at most 2048 characters.');
+  return template.replaceAll('{target}', String(target));
 }
 
 /** Recognize the shipped native prompt, without storing or replacing its text. */
 export function nativeSummaryMessage(options) {
-  if (options?.purpose !== 'compaction' || !Array.isArray(options.messages)) return null;
+  if (options?.purpose !== 'compaction' || !Array.isArray(options.messages) || augmentedMessages.has(options.messages)) return null;
   const message = options.messages.at(-1);
   if (message?.role !== 'user' || message.content?.length !== 1 || message.content[0]?.type !== 'text') return null;
   const text = message.content[0].text;
@@ -73,7 +79,11 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
       const value = getSettings();
       const enabled = value.summaryGuidance === undefined ? true : value.summaryGuidance;
       const divisor = value.summaryContextDivisor === undefined ? DEFAULT_SUMMARY_DIVISOR : value.summaryContextDivisor;
-      return enabled === true && positive(divisor) ? { divisor } : null;
+      const outputDivisor = value.summaryOutputDivisor === undefined ? 2 : value.summaryOutputDivisor;
+      const sourceDivisor = value.summarySourceDivisor === undefined ? 2 : value.summarySourceDivisor;
+      const template = value.summaryPromptTemplate === undefined ? DEFAULT_SUMMARY_TEMPLATE : value.summaryPromptTemplate;
+      return enabled === true && [divisor, outputDivisor, sourceDivisor].every(validSummaryDivisor) && validSummaryTemplate(template)
+        ? { divisor, outputDivisor, sourceDivisor, template } : null;
     } catch { return null; }
   }
   const remove = ctx.on('llm/stream', (options, next) => {
@@ -93,15 +103,17 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
         let contextWindow;
         try { contextWindow = await resolveContext(options); }
         catch { /* Metadata/compatibility failure must not break native inference. */ }
-        const target = planSummaryTarget(contextWindow, options.maxTokens, sourceTokens, selected.divisor);
+        const target = planSummaryTarget(contextWindow, options.maxTokens, sourceTokens, selected.divisor, selected.outputDivisor, selected.sourceDivisor);
         const current = preferences();
-        if (!closed && !options.signal?.aborted && current?.divisor === selected.divisor && target !== null && options.messages === original) {
-          const last = { ...native, content: [{ ...native.content[0], text: `${native.content[0].text}\n- ${summaryInstruction(target)}` }] };
+        if (!closed && !options.signal?.aborted && current && Object.keys(selected).every(key => selected[key] === current[key]) && target !== null && options.messages === original) {
+          const last = { ...native, content: [{ ...native.content[0], text: `${native.content[0].text}\n- ${summaryInstruction(target, selected.template)}` }] };
           augmented = [...original.slice(0, -1), last];
+          augmentedMessages.add(augmented);
           options.messages = augmented;
         }
         yield* next();
       } finally {
+        if (augmented) augmentedMessages.delete(augmented);
         if (augmented && options.messages === augmented) options.messages = original;
       }
     })();

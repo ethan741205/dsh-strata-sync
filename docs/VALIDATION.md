@@ -2,6 +2,13 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## Editable summary prompt and fractional divisors 0.10.0
+
+- The compact settings card displays the exact editable supplement; detailed limits and the output/source divisors are inside a collapsed disclosure. All three locales preserve the saved prompt verbatim. Restore-default changes the draft until preferences are saved.
+- `summaryPromptTemplate` requires literal `{target}` and at most 2,048 characters. Substitution is plain text, never code evaluation; the native instruction remains intact. All three divisors accept finite numbers from 1 to `Number.MAX_SAFE_INTEGER`, including fractions. Defaults remain 16/2/2; the final target is floored.
+- All **151 automated tests pass**, including 38 UI tests and the package verifier. Checks cover saved custom prompts, restore-default, locale stability, fractional bounds, invalid input, stale preferences during discovery and saving, and custom-text deduplication through the native waterfall. Saving only these preferences leaves model and compaction settings unchanged.
+- A local probe exercised the installed DSH 0.2.1-rc.3 native summary engine with a custom supplement and divisors 8.5/1.5/2.5. At 32K with a 4,096 output cap and sufficient source, the appended target was 2,730 tokens. Defaults, off state, native prompt preservation and unload also passed. Synthetic adapter output was used; no inference requests or real-model truncation claims are involved.
+
 ## Summary guidance controls 0.9.0
 
 - Adds persisted `summaryGuidance` (default `true`) and `summaryContextDivisor` (default `16`). The divisor must be a positive safe integer. Saving these controls uses the existing backup, idle and revision checks and leaves model settings and compaction budgets unchanged.

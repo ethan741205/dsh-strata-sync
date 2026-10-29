@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import z from '@deepseek-ai/schemastery';
 import { discoverStrata, planBudget, StrataSyncError } from './core.mjs';
-import { DEFAULT_SUMMARY_DIVISOR, installSummaryGuidance } from './summary.mjs';
+import { DEFAULT_SUMMARY_DIVISOR, DEFAULT_SUMMARY_TEMPLATE, validSummaryDivisor, validSummaryTemplate, installSummaryGuidance } from './summary.mjs';
 
 export const inject = ['configEditor', 'connection', 'agents', 'credentials', 'agentPresets'];
 export const Config = z.object({
@@ -12,7 +12,10 @@ export const Config = z.object({
   followLoadedModel: z.boolean().default(true),
   outputTokens: z.number().step(1).min(1),
   summaryGuidance: z.boolean().default(true),
-  summaryContextDivisor: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_SUMMARY_DIVISOR),
+  summaryContextDivisor: z.number().min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_SUMMARY_DIVISOR),
+  summaryOutputDivisor: z.number().min(1).max(Number.MAX_SAFE_INTEGER).default(2),
+  summarySourceDivisor: z.number().min(1).max(Number.MAX_SAFE_INTEGER).default(2),
+  summaryPromptTemplate: z.string().default(DEFAULT_SUMMARY_TEMPLATE),
 });
 
 const PACKAGE = 'dsh-strata-sync';
@@ -142,7 +145,9 @@ export function apply(ctx, initialConfig) {
   function publicSettings(value = settings) {
     return { providerId: value.providerId ?? '', autoSync: value.autoSync ?? false,
       followLoadedModel: value.followLoadedModel ?? true, outputTokens: value.outputTokens ?? null,
-      summaryGuidance: value.summaryGuidance ?? true, summaryContextDivisor: value.summaryContextDivisor ?? DEFAULT_SUMMARY_DIVISOR };
+      summaryGuidance: value.summaryGuidance ?? true, summaryContextDivisor: value.summaryContextDivisor ?? DEFAULT_SUMMARY_DIVISOR,
+      summaryOutputDivisor: value.summaryOutputDivisor ?? 2, summarySourceDivisor: value.summarySourceDivisor ?? 2,
+      summaryPromptTemplate: value.summaryPromptTemplate ?? DEFAULT_SUMMARY_TEMPLATE };
   }
   function status() {
     refreshSettings();
@@ -155,7 +160,7 @@ export function apply(ctx, initialConfig) {
         return { id, baseURL };
       });
     } catch { /* The page remains usable when the required provider is absent. */ }
-    return { ...publicSettings(), settingsRevision: hash(publicSettings()),
+    return { ...publicSettings(), defaultSummaryPromptTemplate: DEFAULT_SUMMARY_TEMPLATE, settingsRevision: hash(publicSettings()),
       busy: busy() || !!writeBarrier, providers, lastPreview, lastApplied, lastError };
   }
   async function credential(providerId, route) {
@@ -384,7 +389,7 @@ export function apply(ctx, initialConfig) {
   }
   async function configure(request) {
     ensureOpen();
-    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens', 'summaryGuidance', 'summaryContextDivisor', 'expectedRevision']);
+    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens', 'summaryGuidance', 'summaryContextDivisor', 'summaryOutputDivisor', 'summarySourceDivisor', 'summaryPromptTemplate', 'expectedRevision']);
     refreshSettings();
     if (typeof request.expectedRevision !== 'string' || request.expectedRevision !== hash(publicSettings())) {
       refuse('stale-settings', 'Sync preferences changed. Reload the latest preferences before saving.');
@@ -400,11 +405,14 @@ export function apply(ctx, initialConfig) {
       if (typeof request[key] !== 'boolean') refuse('invalid-request', `${key} must be a boolean.`);
       next[key] = request[key];
     }
-    if (own(request, 'summaryContextDivisor')) {
-      if (!Number.isSafeInteger(request.summaryContextDivisor) || request.summaryContextDivisor < 1) {
-        refuse('invalid-budget', 'Summary context divisor must be a positive safe integer.');
-      }
-      next.summaryContextDivisor = request.summaryContextDivisor;
+    for (const key of ['summaryContextDivisor', 'summaryOutputDivisor', 'summarySourceDivisor']) {
+      if (!own(request, key)) continue;
+      if (!validSummaryDivisor(request[key])) refuse('invalid-budget', 'Summary divisors must be finite numbers from 1 to Number.MAX_SAFE_INTEGER.');
+      next[key] = request[key];
+    }
+    if (own(request, 'summaryPromptTemplate')) {
+      if (!validSummaryTemplate(request.summaryPromptTemplate)) refuse('invalid-request', 'Summary prompt must include {target} and be at most 2048 characters.');
+      next.summaryPromptTemplate = request.summaryPromptTemplate;
     }
     if (own(request, 'outputTokens')) {
       if (request.outputTokens === null) delete next.outputTokens;

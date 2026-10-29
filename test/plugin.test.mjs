@@ -15,7 +15,9 @@ test('native config schema supplies summary defaults and validates persisted pre
   assert.equal(Config({}).summaryGuidance, true);
   assert.equal(Config({}).summaryContextDivisor, 16);
   assert.equal(Config({ summaryGuidance: false, summaryContextDivisor: 32 }).summaryGuidance, false);
-  for (const config of [{ summaryGuidance: 'true' }, ...[0, -1, 1.5, '16', Number.MAX_SAFE_INTEGER + 1].map(summaryContextDivisor => ({ summaryContextDivisor }))]) {
+  assert.equal(Config({ summaryOutputDivisor: 1.5 }).summaryOutputDivisor, 1.5);
+  assert.equal(Config({}).summarySourceDivisor, 2);
+  for (const config of [{ summaryGuidance: 'true' }, ...[0, -1, 0.5, '16', Number.MAX_SAFE_INTEGER + 1].map(summaryContextDivisor => ({ summaryContextDivisor }))]) {
     assert.throws(() => Config(config));
   }
 });
@@ -237,7 +239,8 @@ test('summary preference validation rejects invalid values before backup and rev
   try {
     const initial = (await h.call('status')).value;
     for (const patch of [{ summaryGuidance: null }, { summaryGuidance: 1 },
-      ...[null, 0, -1, 1.5, '16', Number.MAX_SAFE_INTEGER + 1].map(summaryContextDivisor => ({ summaryContextDivisor }))]) {
+      ...['summaryContextDivisor', 'summaryOutputDivisor', 'summarySourceDivisor'].flatMap(key => [null, 0, -1, 0.5, '16', Number.MAX_SAFE_INTEGER + 1].map(value => ({ [key]: value }))),
+      ...[null, '', 'No placeholder', '{target}' + 'a'.repeat(2048)].map(summaryPromptTemplate => ({ summaryPromptTemplate }))]) {
       const result = await h.call('configure', { expectedRevision: initial.settingsRevision, ...patch });
       assert.equal(result.ok, false);
       assert.ok(['invalid-budget', 'invalid-request'].includes(result.error.code));
@@ -251,7 +254,7 @@ test('summary preference validation rejects invalid values before backup and rev
 });
 
 test('summary preference changes during discovery keep the original request', async () => {
-  for (const patch of [{ summaryGuidance: false }, { summaryContextDivisor: 32 }]) {
+  for (const patch of [{ summaryGuidance: false }, { summaryContextDivisor: 32 }, { summaryOutputDivisor: 1.5 }, { summarySourceDivisor: 3.5 }, { summaryPromptTemplate: 'Summarize in {target} tokens.' }]) {
     let h;
     h = await harness({ props: verifiedProps, beforeFetch: async url => {
       if (url.endsWith('/models')) Object.assign(h.entries[3].options.config, patch);
@@ -262,6 +265,35 @@ test('summary preference changes during discovery keep the original request', as
       assert.equal(h.writes, 0);
     } finally { await h.close(); }
   }
+});
+
+test('custom template and fractional divisors persist, render literally, and reset without touching other settings', async () => {
+  const h = await harness({ props: verifiedProps });
+  try {
+    const initial = (await h.call('status')).value;
+    assert.equal(initial.summaryPromptTemplate, initial.defaultSummaryPromptTemplate);
+    const others = structuredClone(h.entries.slice(0, 3));
+    const template = 'Condense into {target} tokens. Keep ${literal} and <tags> intact; limit {target}.';
+    const saved = await h.call('configure', { expectedRevision: initial.settingsRevision,
+      summaryPromptTemplate: template, summaryContextDivisor: 8.5, summaryOutputDivisor: 1.5, summarySourceDivisor: 2.5 });
+    assert.equal(saved.ok, true);
+    h.reload();
+    const current = (await h.call('status')).value;
+    assert.equal(current.summaryPromptTemplate, template);
+    assert.equal(current.summaryContextDivisor, 8.5);
+    assert.equal(current.summaryOutputDivisor, 1.5);
+    assert.equal(current.summarySourceDivisor, 2.5);
+    const options = await summaryRequest(), original = structuredClone(options);
+    for await (const _ of h.stream(options, async function* () {
+      assert.equal(options.messages.at(-1).content[0].text, original.messages.at(-1).content[0].text + '\n- ' + template.replaceAll('{target}', '2730'));
+      assert.equal(options.maxTokens, 4096); yield {};
+    })) {}
+    const reset = await h.call('configure', { expectedRevision: current.settingsRevision, summaryPromptTemplate: current.defaultSummaryPromptTemplate });
+    assert.equal(reset.value.summaryPromptTemplate, initial.summaryPromptTemplate);
+    assert.equal(reset.value.summaryOutputDivisor, 1.5);
+    assert.deepEqual(h.entries.slice(0, 3), others);
+    assert.deepEqual(options, original);
+  } finally { await h.close(); }
 });
 
 test('exact routes use the native owner-only admission boundary without server queries or writes', async () => {

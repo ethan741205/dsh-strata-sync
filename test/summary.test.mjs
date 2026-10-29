@@ -94,14 +94,45 @@ test('custom divisors change the context contribution while preserving hard-cap 
   assert.equal(planSummaryTarget(32768, 4096, 12000, 1), 2048);
   assert.equal(planSummaryTarget(32768, 4096, 1000, 8), 500);
   assert.equal(planSummaryTarget(32768, 4096, 12000, 129), null);
-  for (const invalid of [null, 0, -1, 1.5, NaN, Infinity, '16', Number.MAX_SAFE_INTEGER + 1]) {
+  for (const invalid of [null, 0, -1, 0.5, NaN, Infinity, '16', Number.MAX_SAFE_INTEGER + 1]) {
     assert.equal(planSummaryTarget(32768, 4096, 12000, invalid), null);
   }
 });
 
+test('fractional divisors are independently applied, floored, and never exceed source or hard cap', () => {
+  assert.equal(planSummaryTarget(32768, 4096, 12000, 8.5, 1.5, 2.5), 2730);
+  assert.equal(planSummaryTarget(32768, 4096, 1000, 8.5, 1.5, 2.5), 400);
+  assert.equal(planSummaryTarget(32768, 4096, 12000, 16.5, 1, 1), 1985);
+  for (const bad of [0.5, NaN, Infinity, null, '2', Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(planSummaryTarget(32768, 4096, 12000, 16, bad, 2), null);
+    assert.equal(planSummaryTarget(32768, 4096, 12000, 16, 2, bad), null);
+  }
+});
+
+test('custom template is literal text and missing placeholders or excessive length are rejected', () => {
+  assert.equal(summaryInstruction(1024, '{target} tokens; ${literal}; <tag>; {target}.'), '1024 tokens; ${literal}; <tag>; 1024.');
+  for (const bad of [null, '', 'No target', '{target}' + 'x'.repeat(2048)]) assert.throws(() => summaryInstruction(1024, bad));
+});
+
+test('custom guidance is appended only once across duplicate hooks and restored afterwards', async t => {
+  let metadataCalls = 0;
+  const resolve = async () => { metadataCalls++; return 32768; };
+  const settings = () => ({ summaryPromptTemplate: 'Use at most {target} tokens.\nKeep the next step.', summaryOutputDivisor: 1.5, summaryContextDivisor: 8.5 });
+  const harness = await installed(t, resolve, settings);
+  const second = harness.ctx.plugin(child => installSummaryGuidance(child, resolve, settings));
+  await second.await(); t.after(() => second.dispose());
+  const options = fixture(), original = options.messages;
+  await collect(harness.stream(options, async function* (request) {
+    assert.equal(request.messages.at(-1).content[0].text, nativePrompt + '\n- Use at most 2730 tokens.\nKeep the next step.');
+    yield {};
+  }));
+  assert.equal(metadataCalls, 1); assert.strictEqual(options.messages, original);
+});
+
 test('disabled, invalid or unavailable preferences preserve native compaction without metadata', async t => {
   for (const setting of [{ summaryGuidance: false }, { summaryGuidance: 'true' },
-    { summaryContextDivisor: 0 }, { summaryContextDivisor: null }, null]) {
+    { summaryContextDivisor: 0 }, { summaryContextDivisor: null },
+    { summaryOutputDivisor: 0.5 }, { summarySourceDivisor: Infinity }, { summaryPromptTemplate: 'Missing placeholder' }, null]) {
     let discovery = 0, calls = 0;
     const harness = await installed(t, async () => { discovery++; return 32768; }, () => setting);
     const options = fixture(), original = structuredClone(options.messages);
