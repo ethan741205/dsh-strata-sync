@@ -4,8 +4,6 @@
 
 讓 **DeepSeek Harness（DSH）** 對齊 **Strata Server** 實際載入的模型，並在 DSH **設定 → dsh-strata-sync** 中提供操作介面。
 
-UI 支援 English、简体中文、繁體中文。自動跟隨 DSH 介面語言並即時更新，不提供獨立語言選單。DSH 的 `zh` 對應簡體中文，`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO` 對應繁體中文；其他語言使用英文。伺服器傳回的未知診斷訊息保留原文，以利排查。
-
 0.10.1 進一步精簡摘要設定說明。可保留預設提示詞範本，或使用動態 `{target}` 自訂內容；DSH 原生提示詞與輸出硬上限保持不變。
 
 ## 功能
@@ -84,7 +82,7 @@ dsh plugin --profile desktop add dsh-strata-sync --registry=https://registry.npm
 
 完成後重新開啟 DSH。首次安裝會自動選取 bundle；已安裝但停用的 bundle 需在外掛管理員重新啟用。
 
-要從原始碼安裝**包含摘要提示詞編輯器的 0.10.1**，請使用 Node.js 22 或更新版本建置，並在最後的安裝命令前完成工作、完全結束 DSH Desktop：
+要從原始碼安裝**包含摘要提示詞編輯器的 0.10.2**，請使用 Node.js 22 或更新版本建置，並在最後的安裝命令前完成工作、完全結束 DSH Desktop：
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -92,7 +90,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./dsh-strata-sync-0.10.1.tgz
+dsh plugin --profile desktop add ./dsh-strata-sync-0.10.2.tgz
 ```
 
 執行最後一行前同樣需要完全結束 DSH Desktop，安裝完成後重新開啟。在其他目錄執行時，請使用套件的絕對路徑。

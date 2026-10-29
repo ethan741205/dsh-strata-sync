@@ -4,7 +4,7 @@
 
 A plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded by **Strata Server**, using a native DSH settings UI.
 
-Open **Settings → dsh-strata-sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts. The interface and README are available in English, Simplified Chinese and Traditional Chinese. The interface automatically follows DSH’s language, including live changes. DSH `zh` uses Simplified Chinese; `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` use Traditional Chinese. Other languages fall back to English. There is no separate language preference. Unknown backend diagnostics retain their original text for troubleshooting.
+Open **Settings → dsh-strata-sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts.
 
 Version 0.10.1 shortens the summary settings explanation. Keep the default prompt template or customize it with the dynamic `{target}` placeholder; DSH's native prompt and output cap remain unchanged.
 
@@ -95,7 +95,7 @@ dsh plugin --profile desktop add dsh-strata-sync --registry=https://registry.npm
 
 Reopen DSH after installation. The bundle is automatically selected on its first installation; an already installed but disabled bundle must be enabled in DSH's plugin manager.
 
-To install **0.10.1 with the editable summary prompt** from source, use Node.js 22 or newer, finish active tasks and fully quit DSH Desktop before the final installation command:
+To install **0.10.2 with the editable summary prompt** from source, use Node.js 22 or newer, finish active tasks and fully quit DSH Desktop before the final installation command:
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -103,7 +103,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./dsh-strata-sync-0.10.1.tgz
+dsh plugin --profile desktop add ./dsh-strata-sync-0.10.2.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
