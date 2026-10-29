@@ -2,6 +2,11 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## Concise summary help 0.10.1
+
+- Reduces the expanded summary help to the calculation formula and one native-fallback sentence in all three locales. Full explanations remain in the READMEs. No runtime behavior, settings, defaults or prompt text changes.
+- Verification is limited to the 38 affected UI tests and package checks; inference and native integration tests are not repeated for this wording-only change.
+
 ## Editable summary prompt and fractional divisors 0.10.0
 
 - The compact settings card displays the exact editable supplement; detailed limits and the output/source divisors are inside a collapsed disclosure. All three locales preserve the saved prompt verbatim. Restore-default changes the draft until preferences are saved.

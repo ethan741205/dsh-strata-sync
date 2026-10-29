@@ -6,7 +6,7 @@
 
 UI 支持 English、简体中文、繁體中文。自动跟随 DSH 界面语言并实时更新，不提供独立语言菜单。DSH 的 `zh` 对应简体中文，`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO` 对应繁体中文；其他语言使用英文。服务器返回的未知诊断消息保留原文，方便排查。
 
-0.10.0 精简摘要设置，并让补充提示词可直接编辑。可保留默认模板，或使用动态 `{target}` 自定义内容；DSH 原生提示词与输出硬上限保持不变。
+0.10.1 进一步精简摘要设置说明。可保留默认提示词模板，或使用动态 `{target}` 自定义内容；DSH 原生提示词与输出硬上限保持不变。
 
 ## 功能
 
@@ -84,7 +84,7 @@ dsh plugin --profile desktop add dsh-strata-sync --registry=https://registry.npm
 
 完成后重新打开 DSH。首次安装会自动选中 bundle；已安装但禁用的 bundle 需在插件管理器重新启用。
 
-要从源码安装**包含摘要提示词编辑器的 0.10.0**，请使用 Node.js 22 或更新版本构建，并在最后的安装命令前完成任务、完全退出 DSH Desktop：
+要从源码安装**包含摘要提示词编辑器的 0.10.1**，请使用 Node.js 22 或更新版本构建，并在最后的安装命令前完成任务、完全退出 DSH Desktop：
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -92,7 +92,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./dsh-strata-sync-0.10.0.tgz
+dsh plugin --profile desktop add ./dsh-strata-sync-0.10.1.tgz
 ```
 
 执行最后一行前同样需要完全退出 DSH Desktop，安装完成后重新打开。在其他目录执行时，请使用安装包的绝对路径。
@@ -154,6 +154,8 @@ retainRatio = 0.16
 ConfigEditor 负责单项原子写入与热加载；跨多项设置采用补偿回滚，并非数据库事务。如果同时有外部修改，可能需要依据备份手动恢复。关闭自动同步可取消尚未执行的启动同步，并禁用后续启动同步；移除插件**不会撤销已应用的模型与预算**。需要还原时，请先关闭 DSH 再恢复指定备份。
 
 ## 开发与版本
+
+0.10.1 将摘要界面说明缩短为公式与沿用原生摘要的提示，计算及运行机制不变，完整说明保留在 README。
 
 0.10.0 加入补充提示词编辑器、动态 `{target}` 与恢复默认功能，精简三语摘要区域，新增高级输出／原文除数与三项除数的小数支持，并沿用备份与版本冲突保护。
 

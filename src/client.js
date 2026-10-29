@@ -119,6 +119,10 @@ window.__ModuleLoader__.load({
     "zh-Hant": "目標 = floor(min(上下文 / N, 摘要輸出上限 / O, 待壓縮內容估算 / S))。",
     "zh-Hans": "目标 = floor(min(上下文 / N, 摘要输出上限 / O, 待压缩内容估算 / S))。"
   },
+  "When guidance cannot be applied, DSH keeps its native summary behavior.": {
+    "zh-Hant": "無法套用時，沿用 DSH 原生摘要。",
+    "zh-Hans": "无法应用时，沿用 DSH 原生摘要。"
+  },
   "Enable summary guidance": {
     "zh-Hant": "啟用摘要提示補充",
     "zh-Hans": "启用摘要提示补充"
@@ -539,15 +543,8 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
             h('div',{className:'ss-grid'},
               h('label',null,t('Summary output divisor (output limit ÷ O)'),h('input',{type:'number','data-testid':'summary-output-divisor','aria-label':t('Summary output divisor (output limit ÷ O)'),'aria-invalid':!isDivisor(draft.summaryOutputDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summaryOutputDivisor,onChange:e=>edit({summaryOutputDivisor:e.target.value}),disabled:pending||!state})),
               h('label',null,t('Source length divisor (source estimate ÷ S)'),h('input',{type:'number','data-testid':'summary-source-divisor','aria-label':t('Source length divisor (source estimate ÷ S)'),'aria-invalid':!isDivisor(draft.summarySourceDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summarySourceDivisor,onChange:e=>edit({summarySourceDivisor:e.target.value}),disabled:pending||!state}))),
-            h('p',{className:'ss-muted'},t("Enabled by default. Turning this off keeps DSH's native summary and automatic compaction behavior.")),
-            h('p',{className:'ss-muted'},t('Defaults: N = 16, O = 2, S = 2. Smaller divisors allow longer targets; the smallest of the three bounds wins. Decimals are supported.')),
             h('p',{className:'ss-muted'},t('Target = floor(min(context / N, summary output limit / O, selected content estimate / S)).')),
-            h('p',{className:'ss-muted'},t('Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.')),
-            h('p',{className:'ss-muted'},t('The actual target may be lower for shorter content. System prompts and tool schemas are excluded from the content estimate.')),
-            h('p',{className:'ss-muted'},t('The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.')),
-            h('p',{className:'ss-muted'},t('Targets below 256 tokens leave the original prompt unchanged; the native summary still runs.')),
-            h('p',{className:'ss-muted'},t('If the route or native summary format cannot be verified, DSH uses its original prompt.')),
-            h('p',{className:'ss-muted'},t('Unpriced image/file attachments, cancellation or a disabled plugin preserve native request handling.')))),
+            h('p',{className:'ss-muted'},t('When guidance cannot be applied, DSH keeps its native summary behavior.')))),
         h('div',{className:'ss-actions'},
           h('button',{disabled:pending||!state||!form.providerId||!valid||!dirty||conflict,onClick:()=>action(async()=>{
             const changes=Object.fromEntries(Object.entries(values(formRef.current)).filter(([key,value])=>!Object.is(value,baseline.current.values[key])));

@@ -129,20 +129,17 @@ test('summary guidance defaults on with divisor 16 and preview does not write pr
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.match(card.textContent,/Dynamic summary target/);
   assert.match(card.textContent,/Appended to DSH's native prompt/);
-  assert.match(card.textContent,/not a guaranteed length or an optimal value/);
+  assert.match(card.textContent,/DSH keeps its native summary behavior/);
   assert.equal(card.querySelectorAll('input,select,button,textarea').length,6);
   assert.equal(card.querySelector('textarea').value,DEFAULT_SUMMARY_TEMPLATE);
   assert.equal(card.querySelector('[data-testid="summary-guidance-toggle"]').checked,true);
   assert.equal(card.querySelector('[data-testid="summary-divisor"]').value,'16');
-  assert.match(card.textContent,/Turning this off keeps DSH's native summary and automatic compaction behavior/);
+  assert.equal(card.querySelector('[data-testid="summary-details"]').querySelectorAll('p').length,2);
   assert.equal(card.querySelector('[data-testid="summary-target-ceiling"]'),null);
   assert.equal(card.querySelector('details').open,false);
   await ui.click(ui.button('Check differences'));
   assert.match(card.querySelector('[data-testid="summary-target-ceiling"]').textContent,/2,048 tokens/);
-  assert.match(card.textContent,/System prompts and tool schemas are excluded/);
-  assert.match(card.textContent,/smaller of the verified Strata window and the existing DSH model window/);
-  assert.match(card.textContent,/preview ceiling assumes the proposed budgets/);
-  assert.match(card.textContent,/Unpriced image\/file attachments, cancellation or a disabled plugin/);
+  assert.match(card.textContent,/Target = floor\(min\(context \/ N/);
   assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
   assert.ok(ui.calls.every(c=>['status','preview'].includes(c.name)));
 });
@@ -152,7 +149,7 @@ test('summary preview ceiling follows context and summary cap without claiming t
   await ui.click(ui.button('Check differences'));
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.match(card.querySelector('[data-testid="summary-target-ceiling"]').textContent,/2,048 tokens/);
-  assert.match(card.textContent,/actual target may be lower/);
+  assert.match(card.textContent,/Maximum target for this preview/);
 });
 
 test('summary controls save only changed preferences with their revision and persist off state',async t=>{
@@ -255,16 +252,14 @@ test('summary guidance follows DSH Chinese locales without changing preferences'
   assert.match(card.textContent,/动态摘要目标/);
   assert.match(card.textContent,/附加于 DSH 原生提示词/);
   assert.match(card.textContent,/本次预览的目标上限：2,048 tokens/);
-  assert.match(card.textContent,/不代表最佳值/);
-  assert.match(card.textContent,/已有模型窗口的较小值/);
-  assert.match(card.textContent,/无法估算图片／文件附件用量/);
+  assert.match(card.textContent,/无法应用时，沿用 DSH 原生摘要/);
+  assert.equal(card.querySelector('[data-testid="summary-details"]').querySelectorAll('p').length,2);
   await ui.changeLanguage('zh-Hant');
   assert.match(card.textContent,/動態摘要目標/);
   assert.match(card.textContent,/附加於 DSH 原生提示詞/);
   assert.match(card.textContent,/本次預覽的目標上限：2,048 tokens/);
-  assert.match(card.textContent,/系統提示詞與工具定義/);
-  assert.match(card.textContent,/既有模型視窗的較小值/);
-  assert.match(card.textContent,/無法估算圖片／檔案附件用量/);
+  assert.match(card.textContent,/無法套用時，沿用 DSH 原生摘要/);
+  assert.equal(card.querySelector('[data-testid="summary-details"]').querySelectorAll('p').length,2);
   assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
 });
 
@@ -273,7 +268,7 @@ test('summary preview omits a numeric ceiling when its inputs are unavailable', 
   await ui.click(ui.button('Check differences'));
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.equal(card.querySelector('[data-testid="summary-target-ceiling"]'),null);
-  assert.match(card.textContent,/DSH uses its original prompt/);
+  assert.match(card.textContent,/DSH keeps its native summary behavior/);
   assert.doesNotMatch(card.textContent,/NaN|undefined|Infinity/);
 });
 
