@@ -1,12 +1,12 @@
-# DSH Strata Sync
+# dsh-strata-sync
 
 **English** · [简体中文](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/README.zh-CN.md) · [繁體中文](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/README.zh-TW.md)
 
 A plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded by **Strata Server**, using a native DSH settings UI.
 
-Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts. The interface and README are available in English, Simplified Chinese and Traditional Chinese. The interface automatically follows DSH’s language, including live changes. DSH `zh` uses Simplified Chinese; `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` use Traditional Chinese. Other languages fall back to English. There is no separate language preference. Unknown backend diagnostics retain their original text for troubleshooting.
+Open **Settings → dsh-strata-sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts. The interface and README are available in English, Simplified Chinese and Traditional Chinese. The interface automatically follows DSH’s language, including live changes. DSH `zh` uses Simplified Chinese; `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` use Traditional Chinese. Other languages fall back to English. There is no separate language preference. Unknown backend diagnostics retain their original text for troubleshooting.
 
-Version 0.8.0 calculates a dynamic length target before each supported Strata summary and appends **one sentence** to DSH's native summary prompt. The original prompt, output cap and other settings remain unchanged. The settings page explains the formula and distinguishes this writing target from the hard output limit. Existing synchronization safeguards, startup behavior, capability verification and backups are retained.
+Version 0.8.1 calculates a dynamic length target before each supported Strata summary and appends **one sentence** to DSH's native summary prompt. The original prompt, output cap and other settings remain unchanged. The settings page explains the formula and distinguishes this writing target from the hard output limit. Existing synchronization safeguards, startup behavior, capability verification and backups are retained.
 
 ## What it does
 
@@ -16,14 +16,14 @@ For supported Strata routes, the plugin calculates a fresh writing target for ea
 
 ```text
 context = min(verified Strata context, existing DSH model context)
-target = floor(min(context / 32,
+target = floor(min(context / 16,
                    actual summary maxTokens / 2,
                    selected-content estimated tokens / 2))
 ```
 
 The selected-content estimate covers only the conversation span being replaced, including any prior checkpoint in that span. It excludes the system prompt and tool schemas. Before each summary, read-only metadata queries verify Strata's loaded model and context; the current summary request supplies its actual output cap. The calculation uses the smaller of verified server context and the existing DSH model context, so a larger server window never silently expands a smaller client budget. The target is calculated at summary time, not fixed when DSH starts or when settings are synchronized.
 
-With a 4,096-token summary output cap and enough source content, 32K context gives a target of **1,024 tokens**, and 64K gives **2,048 tokens**. Shorter content lowers the target. **Settings → Strata Sync** shows the formula and the maximum target for a preview; it cannot know the exact target of a future summary.
+With a 4,096-token summary output cap and enough source content, 32K context gives a target of **2,048 tokens**, and 64K gives **2,048 tokens**. Shorter content lowers the target. **Settings → dsh-strata-sync** shows the formula and the maximum target for a preview; it cannot know the exact target of a future summary.
 
 Exactly one supplemental English sentence asks the model to meet that target, retain information needed to continue the remaining work, consolidate prior summaries and remove redundant or obsolete details. The native instructions, eight-section format and existing request options are preserved. The target is a heuristic writing instruction, **not a new hard output limit, an optimal value, or a guarantee against truncation**. No automatic retry loop or extra inference request is added.
 
@@ -66,17 +66,18 @@ The startup idle-wait scheduler includes a narrow DSH 0.2.1-rc.3 compatibility a
 
 ## Install
 
-**Version 0.8.0 is currently available from this GitHub source and its built tarball. npm `latest` is still 0.7.1 and does not include dynamic summary guidance.** To use the new feature, follow the source/tarball installation below. This GitHub update does not publish a new npm version.
+Package name: `dsh-strata-sync` (formerly `@ethan741205/dsh-strata-sync`). Remove the old scoped plugin before installing this package to avoid loading two copies; retain its settings when migrating.
+
 
 For the existing npm release, finish active tasks and fully quit DSH Desktop, then install with the official DSH CLI:
 
 ```sh
-dsh plugin --profile desktop add @ethan741205/dsh-strata-sync --registry=https://registry.npmjs.org/
+dsh plugin --profile desktop add dsh-strata-sync --registry=https://registry.npmjs.org/
 ```
 
 Reopen DSH after installation. The bundle is automatically selected on its first installation; an already installed but disabled bundle must be enabled in DSH's plugin manager.
 
-To install **0.8.0 with dynamic summary guidance**, build from this source with Node.js 22 or newer, finish active tasks and fully quit DSH Desktop before the final installation command:
+To install **0.8.1 with dynamic summary guidance**, build from this source with Node.js 22 or newer, finish active tasks and fully quit DSH Desktop before the final installation command:
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -84,12 +85,12 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.8.0.tgz
+dsh plugin --profile desktop add ./dsh-strata-sync-0.8.1.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
 
-Then open **Settings → Strata Sync**:
+Then open **Settings → dsh-strata-sync**:
 
 1. Choose the existing Strata provider and save preferences. Keep **Follow Strata** enabled, or open **Advanced settings** for a manual output override.
 2. Click **Check differences** to read the loaded model and preview the proposed settings.
@@ -113,7 +114,7 @@ No API key needs to be copied into this plugin. Set up or repair credentials in 
 
 ## Changes in 0.2.0
 
-- Moves the Strata Sync interface into DSH's native **Settings** navigation.
+- Moves the dsh-strata-sync interface into DSH's native **Settings** navigation.
 - Uses English throughout the interface and repository documentation.
 - Preserves the synchronization policy, optional idle polling, backups and existing-conversation behavior described below.
 

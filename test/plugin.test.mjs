@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { apply } from '../src/plugin.mjs';
 
-const PKG = '@ethan741205/dsh-strata-sync';
+const PKG = 'dsh-strata-sync';
 const LLM = '@deepseek-ai/dsh-llm-pi-ai';
 const COMPACT = '@deepseek-ai/dsh-compaction-basic';
 const DEFAULT = '@deepseek-ai/dsh-agent-default-model';
@@ -130,7 +130,7 @@ test('live summaries recheck verified metadata and append one sentence without c
   try {
     h.setRunning(true);
     const before = structuredClone(h.entries.map(row => row.options.config));
-    for (const [maxTokens, target] of [[4096,1024],[1024,512]]) {
+    for (const [maxTokens, target] of [[4096,2048],[1024,512]]) {
       const options = await summaryRequest({ maxTokens });
       const original = structuredClone(options);
       let dispatches = 0;
@@ -186,7 +186,7 @@ test('summary target respects a smaller existing client context without syncing 
     h.entries[0].options.config.providers['strata-server'].models[0].contextWindow = 16384;
     const options = await summaryRequest();
     for await (const _ of h.stream(options, async function* () {
-      assert.match(options.messages.at(-1).content[0].text,/target of 512 tokens/); yield {};
+      assert.match(options.messages.at(-1).content[0].text,/target of 1024 tokens/); yield {};
     })) {}
     assert.equal(h.writes,0);
   } finally { await h.close(); }

@@ -1,12 +1,12 @@
-# DSH Strata Sync
+# dsh-strata-sync
 
 [English](https://github.com/ethan741205/dsh-strata-sync/blob/main/README.md) · [简体中文](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/README.zh-CN.md) · **繁體中文**
 
-讓 **DeepSeek Harness（DSH）** 對齊 **Strata Server** 實際載入的模型，並在 DSH **設定 → Strata Sync** 中提供操作介面。
+讓 **DeepSeek Harness（DSH）** 對齊 **Strata Server** 實際載入的模型，並在 DSH **設定 → dsh-strata-sync** 中提供操作介面。
 
 UI 支援 English、简体中文、繁體中文。自動跟隨 DSH 介面語言並即時更新，不提供獨立語言選單。DSH 的 `zh` 對應簡體中文，`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO` 對應繁體中文；其他語言使用英文。伺服器傳回的未知診斷訊息保留原文，以利排查。
 
-0.8.0 的動態摘要引導會在每次支援的 Strata 摘要請求前計算長度目標，並在 DSH 原生摘要提示詞後**只補充一句**。保留原提示詞、輸出硬上限與其他設定；設定頁解釋公式，並區分寫作目標與輸出硬上限。既有同步保護、啟動行為、能力驗證及備份機制保持不變。
+0.8.1 的動態摘要引導會在每次支援的 Strata 摘要請求前計算長度目標，並在 DSH 原生摘要提示詞後**只補充一句**。保留原提示詞、輸出硬上限與其他設定；設定頁解釋公式，並區分寫作目標與輸出硬上限。既有同步保護、啟動行為、能力驗證及備份機制保持不變。
 
 ## 功能
 
@@ -16,14 +16,14 @@ UI 支援 English、简体中文、繁體中文。自動跟隨 DSH 介面語言�
 
 ```text
 上下文 = min(已確認的 Strata 上下文, DSH 既有模型上下文)
-目標 = floor(min(上下文 / 32,
+目標 = floor(min(上下文 / 16,
                  本次摘要實際 maxTokens / 2,
                  待替換內容的估算 tokens / 2))
 ```
 
 內容估算只包含這次要替換的對話片段，以及片段內既有的摘要；不包含系統提示詞和工具定義。外掛在每次摘要前透過唯讀查詢核對 Strata 目前載入模型與上下文，並讀取本次摘要請求的實際輸出硬上限。上下文取伺服器已確認值與 DSH 既有模型設定的較小值，不會因為伺服器視窗較大而偷偷擴大較小的客戶端預算。目標不是啟動 DSH 或同步設定時固定下來的。
 
-摘要硬上限為 4,096、原文足夠長時，32K 上下文對應 **1,024 tokens**，64K 對應 **2,048 tokens**；內容較短時目標會降低。**設定 → Strata Sync** 顯示公式與本次預覽的目標上限，無法提前得知未來摘要的實際目標。
+摘要硬上限為 4,096、原文足夠長時，32K 上下文對應 **2,048 tokens**，64K 對應 **2,048 tokens**；內容較短時目標會降低。**設定 → dsh-strata-sync** 顯示公式與本次預覽的目標上限，無法提前得知未來摘要的實際目標。
 
 外掛只補充一句英文，要求模型依目標長度完成摘要、保留接續未完成工作所需的資訊、整合舊摘要，並刪除重複或過時細節。原生提示詞、八個章節和既有請求參數保持不變。這是啟發式寫作目標，**不是新的輸出硬上限、最佳值，也不能保證不截斷**；不增加自動重試流程或額外推論請求。
 
@@ -55,17 +55,18 @@ UI 支援 English、简体中文、繁體中文。自動跟隨 DSH 介面語言�
 
 ## 安裝與使用
 
-**0.8.0 目前透過此 GitHub 原始碼及其建置的 tarball 提供；npm `latest` 仍為 0.7.1，不包含動態摘要引導。** 要使用新功能，請依下方原始碼／tarball 步驟安裝。本次 GitHub 更新不發布新的 npm 版本。
+套件名稱為 `dsh-strata-sync`（原名 `@ethan741205/dsh-strata-sync`）；遷移時保留原設定，移除舊 scoped 插件後再安裝新套件，避免同時載入兩份。
+
 
 若要安裝既有的 npm 版本，先完成工作並完全結束 DSH Desktop，再使用官方 DSH CLI 從 npm 官方 registry 安裝：
 
 ```sh
-dsh plugin --profile desktop add @ethan741205/dsh-strata-sync --registry=https://registry.npmjs.org/
+dsh plugin --profile desktop add dsh-strata-sync --registry=https://registry.npmjs.org/
 ```
 
 完成後重新開啟 DSH。首次安裝會自動選取 bundle；已安裝但停用的 bundle 需在外掛管理員重新啟用。
 
-要安裝**包含動態摘要引導的 0.8.0**，請使用 Node.js 22 或更新版本從此原始碼建置，並在最後的安裝命令前完成工作、完全結束 DSH Desktop：
+要安裝**包含動態摘要引導的 0.8.1**，請使用 Node.js 22 或更新版本從此原始碼建置，並在最後的安裝命令前完成工作、完全結束 DSH Desktop：
 
 ```sh
 git clone https://github.com/ethan741205/dsh-strata-sync.git
@@ -73,12 +74,12 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.8.0.tgz
+dsh plugin --profile desktop add ./dsh-strata-sync-0.8.1.tgz
 ```
 
 執行最後一行前同樣需要完全結束 DSH Desktop，安裝完成後重新開啟。在其他目錄執行時，請使用套件的絕對路徑。
 
-先在 DSH 模型設定建立 Strata 供應者，再開啟 **設定 → Strata Sync**：
+先在 DSH 模型設定建立 Strata 供應者，再開啟 **設定 → dsh-strata-sync**：
 
 1. 選擇既有 Strata 供應者，按「儲存偏好」。保留「跟隨 Strata」，需要手動覆寫輸出上限時再展開「進階設定」。
 2. 按「檢查差異」，預覽目前載入模型與建議設定。

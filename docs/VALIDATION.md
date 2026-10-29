@@ -2,6 +2,12 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## Package rename and target ratio 0.8.1
+
+- Package identity, native bundle and client module now use `dsh-strata-sync`; the GitHub repository is unchanged. Existing scoped installations must be migrated, not loaded alongside the renamed plugin.
+- The context contribution to the target changes from `/ 32` to `/ 16`. Summary-cap and selected-source bounds stay at `/ 2`; with a 4,096 summary cap, sufficiently long sources at both 32K and 64K now target 2,048 tokens. Other model and compaction settings are unchanged.
+- Necessary verification consists of the 86 affected summary, plugin and UI tests plus the package verifier. Existing 0.8.0 native-runtime integration evidence below is historical; it was not rerun for this arithmetic/name change.
+
 ## Dynamic summary guidance 0.8.0
 
 - Each supported native summary receives exactly one appended sentence. The target is `floor(min(context / 32, request.maxTokens / 2, selected-content estimate / 2))`; context is the smaller of verified server and existing client capacity. Source estimates exclude system messages, tool schemas and the summary instruction. Unknown attachment pricing and targets below 256 leave the native request unchanged.

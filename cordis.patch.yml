@@ -1,3 +1,3 @@
 - insert:
     - id: strata-sync
-      name: '@ethan741205/dsh-strata-sync'
+      name: 'dsh-strata-sync'

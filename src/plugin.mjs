@@ -13,12 +13,12 @@ export const Config = z.object({
   outputTokens: z.number().step(1).min(1),
 });
 
-const PACKAGE = '@ethan741205/dsh-strata-sync';
+const PACKAGE = 'dsh-strata-sync';
 const COMPACTION = '@deepseek-ai/dsh-compaction-basic';
 const PRESET = '@deepseek-ai/dsh-agent-preset';
 const CHANNEL = '/api/strata-sync';
 // Survives plugin hot reloads, but not a new DSH host process. One completed attempt per profile.
-const startupKey = Symbol.for('@ethan741205/dsh-strata-sync/startup');
+const startupKey = Symbol.for('dsh-strata-sync/startup');
 const startupProfiles = globalThis[startupKey] ??= new Map();
 const clone = (value) => structuredClone(value);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');

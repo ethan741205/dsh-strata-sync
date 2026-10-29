@@ -98,7 +98,7 @@ async function mount({ initial = status(), previewResult = preview(), failEndpoi
 
 test('native module loader registers an English Settings section without displaying credentials', async t => {
   const details = await mount(); t.after(() => details.unmount());
-  assert.equal(details.container.querySelector('h2').textContent, 'Strata Sync');
+  assert.equal(details.container.querySelector('h2').textContent, 'dsh-strata-sync');
   assert.ok(!details.container.innerHTML.includes('secret-that-must-not-render'));
   await details.click(details.button('Check differences'));
   assert.match(details.container.textContent, /qwen-local/);
@@ -118,7 +118,7 @@ test('summary guidance shows a preview ceiling without adding preferences or inf
   assert.equal(card.querySelector('[data-testid="summary-target-ceiling"]'),null);
   assert.equal(card.querySelector('details').open,false);
   await ui.click(ui.button('Check differences'));
-  assert.match(card.querySelector('[data-testid="summary-target-ceiling"]').textContent,/1,024 tokens/);
+  assert.match(card.querySelector('[data-testid="summary-target-ceiling"]').textContent,/2,048 tokens/);
   assert.match(card.textContent,/System prompts and tool schemas are excluded/);
   assert.match(card.textContent,/smaller of the verified Strata window and the existing DSH model window/);
   assert.match(card.textContent,/preview ceiling assumes the proposed budgets/);
@@ -142,14 +142,14 @@ test('summary guidance follows DSH Chinese locales without changing preferences'
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.match(card.textContent,/动态摘要目标/);
   assert.match(card.textContent,/后补充一句/);
-  assert.match(card.textContent,/本次预览的目标上限：1,024 tokens/);
+  assert.match(card.textContent,/本次预览的目标上限：2,048 tokens/);
   assert.match(card.textContent,/不代表最佳值/);
   assert.match(card.textContent,/已有模型窗口的较小值/);
   assert.match(card.textContent,/无法估算图片／文件附件用量/);
   await ui.changeLanguage('zh-Hant');
   assert.match(card.textContent,/動態摘要目標/);
   assert.match(card.textContent,/後補充一句/);
-  assert.match(card.textContent,/本次預覽的目標上限：1,024 tokens/);
+  assert.match(card.textContent,/本次預覽的目標上限：2,048 tokens/);
   assert.match(card.textContent,/系統提示詞與工具定義/);
   assert.match(card.textContent,/既有模型視窗的較小值/);
   assert.match(card.textContent,/無法估算圖片／檔案附件用量/);

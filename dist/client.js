@@ -1,6 +1,6 @@
 /* Browser entry: DSH's own module loader provides React and services. */
 window.__ModuleLoader__.load({
-  id: '@ethan741205/dsh-strata-sync',
+  id: 'dsh-strata-sync',
   factory: (require) => {
     const React = require('react');
     const h = React.createElement;
@@ -95,9 +95,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "每次支援的 Strata 摘要請求前，計算長度目標，並在 DSH 原生摘要提示詞後補充一句。",
     "zh-Hans": "每次支持的 Strata 摘要请求前，计算长度目标，并在 DSH 原生摘要提示词后补充一句。"
   },
-  "Target = floor(min(context / 32, summary output limit / 2, selected content estimate / 2)).": {
-    "zh-Hant": "目標 = floor(min(上下文 / 32, 摘要輸出上限 / 2, 待壓縮內容估算 / 2))。",
-    "zh-Hans": "目标 = floor(min(上下文 / 32, 摘要输出上限 / 2, 待压缩内容估算 / 2))。"
+  "Target = floor(min(context / 16, summary output limit / 2, selected content estimate / 2)).": {
+    "zh-Hant": "目標 = floor(min(上下文 / 16, 摘要輸出上限 / 2, 待壓縮內容估算 / 2))。",
+    "zh-Hans": "目标 = floor(min(上下文 / 16, 摘要输出上限 / 2, 待压缩内容估算 / 2))。"
   },
   "Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.": {
     "zh-Hant": "上下文採用已確認的 Strata 視窗與 DSH 既有模型視窗的較小值。預覽上限依提議預算計算，既有對話設定可能讓實際目標更低。",
@@ -299,9 +299,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "原設定備份：",
     "zh-Hans": "原设置备份："
   },
-  "Strata Sync is not ready.": {
-    "zh-Hant": "Strata Sync 尚未就緒。",
-    "zh-Hans": "Strata Sync 尚未就绪。"
+  "dsh-strata-sync is not ready.": {
+    "zh-Hant": "dsh-strata-sync 尚未就緒。",
+    "zh-Hans": "dsh-strata-sync 尚未就绪。"
   },
   "Server diagnostic: ": {
     "zh-Hant": "伺服器診斷：",
@@ -416,7 +416,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       const displayedResult=!result || state?.lastApplied?.at>result.at ? state?.lastApplied : result;
       const activeBudget=preview?.budget;
       const summaryTargetCeiling=Number.isSafeInteger(activeBudget?.contextWindow)&&activeBudget.contextWindow>0&&Number.isSafeInteger(activeBudget?.summaryMaxTokens)&&activeBudget.summaryMaxTokens>0
-        ? Math.floor(Math.min(activeBudget.contextWindow/32,activeBudget.summaryMaxTokens/2)) : null;
+        ? Math.floor(Math.min(activeBudget.contextWindow/16,activeBudget.summaryMaxTokens/2)) : null;
       const outputSource=(budget)=>t(({server:'Strata Server default',manual:'Manual override',calculated:'Automatic calculation'})[budget?.outputSource]||'Automatic calculation');
       const preserved=(view)=>{
         const status=view?.capabilityStatus;
@@ -435,9 +435,9 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         h('div',null,h('strong',null,format(budget?.outputTokens)),h('div',{className:'ss-muted'},t('Effective output limit'))),
         h('div',null,h('strong',null,outputSource(budget)),h('div',{className:'ss-muted'},t('Output limit source: '))));
       const warnings=(items)=>(items||[]).map((w,i)=>h('div',{key:i,className:'ss-status ss-error'},typeof w==='string'?(t(warningText[w])||(w.startsWith('SLOTS_')?t('Live slot information is unavailable. Using the model context reported by Strata.'):w)):JSON.stringify(w)));
-      return h('section',{className:'strata-sync','aria-label':'Strata Sync'},
+      return h('section',{className:'strata-sync','aria-label':'dsh-strata-sync'},
         h('style',null,css),
-        h('header',null,h('h2',null,'Strata Sync'),h('p',{className:'ss-muted'},t('Align DSH with the model loaded by Strata Server. The server supplies model, context and any fixed output default; this plugin calculates fallback output and compaction budgets.'))),
+        h('header',null,h('h2',null,'dsh-strata-sync'),h('p',{className:'ss-muted'},t('Align DSH with the model loaded by Strata Server. The server supplies model, context and any fixed output default; this plugin calculates fallback output and compaction budgets.'))),
         !state&&!loadError&&h('div',{className:'ss-status',role:'status'},t('Loading sync settings...')),
         state?.busy&&h('div',{className:'ss-status',role:'status'},t('DSH is running a task. Synchronization will wait until all tasks are idle.')),
         (error||loadError)&&h('div',{className:'ss-status ss-error',role:'alert'},diagnostic(error||loadError)),
@@ -477,7 +477,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           h('p',null,t("Before each supported Strata summary, calculates a length target and appends one sentence to DSH's native summary prompt.")),
           summaryTargetCeiling!==null&&h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens'),
           h('details',{className:'ss-details'},h('summary',null,t('How the target is calculated')),
-            h('p',{className:'ss-muted'},t('Target = floor(min(context / 32, summary output limit / 2, selected content estimate / 2)).')),
+            h('p',{className:'ss-muted'},t('Target = floor(min(context / 16, summary output limit / 2, selected content estimate / 2)).')),
             h('p',{className:'ss-muted'},t('Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.')),
             h('p',{className:'ss-muted'},t('The actual target may be lower for shorter content. System prompts and tool schemas are excluded from the content estimate.')),
             h('p',{className:'ss-muted'},t('The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.')),
@@ -522,14 +522,14 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       const rpc = async (endpoint,payload) => {
         const result = await ctx.connection.rpc.call('/api','strata-sync/'+endpoint,payload);
         if (!result?.ok) {
-          const error = new Error(result?.error?.message || 'Strata Sync is not ready.');
+          const error = new Error(result?.error?.message || 'dsh-strata-sync is not ready.');
           error.code = result?.error?.code;
           throw error;
         }
         return result.value;
       };
       ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
-        name:'settings.section',id:'strata-sync',order:25,label:()=> 'Strata Sync',inject:()=>({rpc,localeStore}),
+        name:'settings.section',id:'strata-sync',order:25,label:()=> 'dsh-strata-sync',inject:()=>({rpc,localeStore}),
       },SettingsPage)), 'strata-sync: settings page');
     }
     return {inject:['slots','connection','locale'],apply};

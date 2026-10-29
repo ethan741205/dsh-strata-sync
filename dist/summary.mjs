@@ -10,7 +10,7 @@ export const MIN_SUMMARY_TARGET = 256;
 
 export function planSummaryTarget(contextWindow, summaryMaxTokens, sourceTokens) {
   if (![contextWindow, summaryMaxTokens, sourceTokens].every(positive)) return null;
-  const target = Math.floor(Math.min(contextWindow / 32, summaryMaxTokens / 2, sourceTokens / 2));
+  const target = Math.floor(Math.min(contextWindow / 16, summaryMaxTokens / 2, sourceTokens / 2));
   return target >= MIN_SUMMARY_TARGET ? target : null;
 }
 

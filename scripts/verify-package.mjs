@@ -35,14 +35,14 @@ export async function verifyPackage() {
   for (const target of [manifest.main, ...Object.values(manifest.exports)]) {
     assert.ok(files.has(target.replace(/^\.\//, '')), `Missing runtime entry: ${target}`);
   }
-  assert.match(await readFile(join(root, 'cordis.patch.yml'), 'utf8'), /name: ['"]?@ethan741205\/dsh-strata-sync/);
+  assert.match(await readFile(join(root, 'cordis.patch.yml'), 'utf8'), /name: ['"]?dsh-strata-sync/);
   for (const [source, built] of [['src/plugin.mjs', 'dist/index.js'], ['src/client.js', 'dist/client.js'], ['src/core.mjs', 'dist/core.mjs'], ['src/summary.mjs', 'dist/summary.mjs']]) {
     assert.equal((await readFile(join(root, source), 'utf8')).replace(/\r\n/g, '\n'),
       (await readFile(join(root, built), 'utf8')).replace(/\r\n/g, '\n'), `Run npm run build: ${built} is stale.`);
   }
   for (const name of ['README.md', 'docs/README.zh-CN.md', 'docs/README.zh-TW.md']) {
     const text = await readFile(join(root, name), 'utf8');
-    assert.ok(text.includes('dsh plugin --profile desktop add @ethan741205/dsh-strata-sync'), `${name} needs registry install instructions.`);
+    assert.ok(text.includes('dsh plugin --profile desktop add dsh-strata-sync'), `${name} needs registry install instructions.`);
     for (const match of text.matchAll(/\]\(([^)]+)\)/g)) {
       const link = match[1];
       assert.match(link, /^https:\/\//, `${name} has a relative link that may break on npm: ${link}`);

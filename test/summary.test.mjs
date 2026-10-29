@@ -57,7 +57,7 @@ async function collect(stream) {
 }
 
 test('summary target follows context, real hard cap, and source bounds', () => {
-  assert.equal(planSummaryTarget(32768, 4096, 12000), 1024);
+  assert.equal(planSummaryTarget(32768, 4096, 12000), 2048);
   assert.equal(planSummaryTarget(65536, 4096, 12000), 2048);
   assert.equal(planSummaryTarget(131072, 4096, 12000), 2048);
   assert.equal(planSummaryTarget(65536, 1024, 12000), 512);
@@ -68,7 +68,7 @@ test('summary target follows context, real hard cap, and source bounds', () => {
         const target = planSummaryTarget(context, cap, source);
         if (target === null) continue;
         assert.ok(Number.isInteger(target));
-        assert.ok(target <= context / 32 && target <= cap / 2 && target <= source / 2);
+        assert.ok(target <= context / 16 && target <= cap / 2 && target <= source / 2);
       }
     }
   }
@@ -114,7 +114,7 @@ test('recognizes the real native prompt and rejects foreign or already augmented
   changed.at(-1).content[0].text = nativePrompt.replace('## Next Step', '## Plan');
   assert.equal(nativeSummaryMessage({ ...options, messages: changed }), null);
   const augmented = structuredClone(options.messages);
-  augmented.at(-1).content[0].text += '\n- ' + summaryInstruction(1024);
+  augmented.at(-1).content[0].text += '\n- ' + summaryInstruction(2048);
   assert.equal(nativeSummaryMessage({ ...options, messages: augmented }), null);
   assert.equal(nativeSummaryMessage({ ...options, purpose: 'agent' }), null);
 });
@@ -140,7 +140,7 @@ test('real Cordis stream appends exactly one sentence and restores all native op
     assert.strictEqual(request.messages[1], originals.messages[1]);
     assert.equal(request.messages.length, originals.messages.length);
     const supplemented = request.messages.at(-1).content[0].text;
-    assert.equal(supplemented, nativePrompt + '\n- ' + summaryInstruction(1024));
+    assert.equal(supplemented, nativePrompt + '\n- ' + summaryInstruction(2048));
     assert.equal(supplemented.slice(0, nativePrompt.length), nativePrompt);
     assert.equal(supplemented.slice(nativePrompt.length).match(/\./g)?.length, 1);
     assert.equal(request.messages.at(-1).content.length, 1);
@@ -169,7 +169,7 @@ test('each summary recalculates from its actual hard cap and selected content', 
     }));
   }
   assert.equal(calls, 3);
-  for (const [index, target] of [1024, 2048, 512].entries()) {
+  for (const [index, target] of [2048, 2048, 512].entries()) {
     assert.equal(observed[index], nativePrompt + '\n- ' + summaryInstruction(target));
   }
 });
@@ -314,7 +314,7 @@ test('concurrent summaries keep independent targets and restore their own messag
   assert.strictEqual(optionsB.messages, originalB);
   aGate.resolve(32768);
   await a;
-  assert.equal(observed.get('a'), nativePrompt + '\n- ' + summaryInstruction(1024));
+  assert.equal(observed.get('a'), nativePrompt + '\n- ' + summaryInstruction(2048));
   assert.equal(observed.get('b'), nativePrompt + '\n- ' + summaryInstruction(2048));
   assert.strictEqual(optionsA.messages, originalA);
 });
@@ -329,7 +329,7 @@ test('duplicate hooks never duplicate the sentence or model request', async t =>
   const options = fixture(), original = options.messages;
   await collect(harness.stream(options, async function* (request) {
     dispatches++;
-    assert.equal(request.messages.at(-1).content[0].text, nativePrompt + '\n- ' + summaryInstruction(1024));
+    assert.equal(request.messages.at(-1).content[0].text, nativePrompt + '\n- ' + summaryInstruction(2048));
     yield { type: 'finish', reason: { kind: 'stop' } };
   }));
   assert.equal(metadataCalls, 1);
