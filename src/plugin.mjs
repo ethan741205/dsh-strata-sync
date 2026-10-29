@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import z from '@deepseek-ai/schemastery';
 import { discoverStrata, planBudget, StrataSyncError } from './core.mjs';
-import { installSummaryGuidance } from './summary.mjs';
+import { DEFAULT_SUMMARY_DIVISOR, installSummaryGuidance } from './summary.mjs';
 
 export const inject = ['configEditor', 'connection', 'agents', 'credentials', 'agentPresets'];
 export const Config = z.object({
@@ -11,6 +11,8 @@ export const Config = z.object({
   autoSync: z.boolean().default(false),
   followLoadedModel: z.boolean().default(true),
   outputTokens: z.number().step(1).min(1),
+  summaryGuidance: z.boolean().default(true),
+  summaryContextDivisor: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_SUMMARY_DIVISOR),
 });
 
 const PACKAGE = 'dsh-strata-sync';
@@ -139,7 +141,8 @@ export function apply(ctx, initialConfig) {
   }
   function publicSettings(value = settings) {
     return { providerId: value.providerId ?? '', autoSync: value.autoSync ?? false,
-      followLoadedModel: value.followLoadedModel ?? true, outputTokens: value.outputTokens ?? null };
+      followLoadedModel: value.followLoadedModel ?? true, outputTokens: value.outputTokens ?? null,
+      summaryGuidance: value.summaryGuidance ?? true, summaryContextDivisor: value.summaryContextDivisor ?? DEFAULT_SUMMARY_DIVISOR };
   }
   function status() {
     refreshSettings();
@@ -193,7 +196,11 @@ export function apply(ctx, initialConfig) {
     // A server/client mismatch must not enlarge the target past either capacity.
     return Math.min(discovered.model.contextWindow, model.contextWindow);
   }
-  installSummaryGuidance(ctx, summaryContext);
+  installSummaryGuidance(ctx, summaryContext, () => {
+    ensureOpen();
+    refreshSettings();
+    return settings;
+  });
   async function preview(request = {}) {
     ensureOpen();
     payload(request, ['providerId', 'outputTokens']);
@@ -377,7 +384,7 @@ export function apply(ctx, initialConfig) {
   }
   async function configure(request) {
     ensureOpen();
-    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens', 'expectedRevision']);
+    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens', 'summaryGuidance', 'summaryContextDivisor', 'expectedRevision']);
     refreshSettings();
     if (typeof request.expectedRevision !== 'string' || request.expectedRevision !== hash(publicSettings())) {
       refuse('stale-settings', 'Sync preferences changed. Reload the latest preferences before saving.');
@@ -388,10 +395,16 @@ export function apply(ctx, initialConfig) {
       if (typeof request.providerId !== 'string') refuse('invalid-request', 'Provider must be a string.');
       next.providerId = request.providerId;
     }
-    for (const key of ['autoSync', 'followLoadedModel']) {
+    for (const key of ['autoSync', 'followLoadedModel', 'summaryGuidance']) {
       if (!own(request, key)) continue;
       if (typeof request[key] !== 'boolean') refuse('invalid-request', `${key} must be a boolean.`);
       next[key] = request[key];
+    }
+    if (own(request, 'summaryContextDivisor')) {
+      if (!Number.isSafeInteger(request.summaryContextDivisor) || request.summaryContextDivisor < 1) {
+        refuse('invalid-budget', 'Summary context divisor must be a positive safe integer.');
+      }
+      next.summaryContextDivisor = request.summaryContextDivisor;
     }
     if (own(request, 'outputTokens')) {
       if (request.outputTokens === null) delete next.outputTokens;
@@ -403,8 +416,7 @@ export function apply(ctx, initialConfig) {
     // Editing our own entry can dispose this plugin before edit() resolves.
     // Build the response while this Cordis scope is still alive; never read its
     // injected services after Loader replaces it.
-    const response = { ...status(), providerId: next.providerId, autoSync: next.autoSync,
-      followLoadedModel: next.followLoadedModel, outputTokens: next.outputTokens ?? null,
+    const response = { ...status(), ...publicSettings(next),
       settingsRevision: hash(publicSettings(next)), lastPreview: null, lastError: null };
     await backup();
     ensureOpen();

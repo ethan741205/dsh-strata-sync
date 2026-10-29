@@ -34,10 +34,10 @@ const fixture = (changes = {}) => ({
   ],
   ...changes,
 });
-async function installed(t, resolveContext = async () => 32768) {
+async function installed(t, resolveContext = async () => 32768, getSettings) {
   const ctx = new Context();
   const llm = new Service(ctx, 'llm');
-  const fiber = ctx.plugin(child => installSummaryGuidance(child, resolveContext));
+  const fiber = ctx.plugin(child => installSummaryGuidance(child, resolveContext, getSettings));
   await fiber.await();
   assert.equal(fiber.state, 2);
   t.after(() => fiber.dispose());
@@ -86,6 +86,56 @@ test('tiny or unknown targets are not rounded up or invented', () => {
   }
   assert.throws(() => summaryInstruction(0), TypeError);
   assert.throws(() => summaryInstruction(1.5), TypeError);
+});
+
+test('custom divisors change the context contribution while preserving hard-cap and source bounds', () => {
+  assert.equal(planSummaryTarget(32768, 8192, 12000, 8), 4096);
+  assert.equal(planSummaryTarget(32768, 4096, 12000, 32), 1024);
+  assert.equal(planSummaryTarget(32768, 4096, 12000, 1), 2048);
+  assert.equal(planSummaryTarget(32768, 4096, 1000, 8), 500);
+  assert.equal(planSummaryTarget(32768, 4096, 12000, 129), null);
+  for (const invalid of [null, 0, -1, 1.5, NaN, Infinity, '16', Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(planSummaryTarget(32768, 4096, 12000, invalid), null);
+  }
+});
+
+test('disabled, invalid or unavailable preferences preserve native compaction without metadata', async t => {
+  for (const setting of [{ summaryGuidance: false }, { summaryGuidance: 'true' },
+    { summaryContextDivisor: 0 }, { summaryContextDivisor: null }, null]) {
+    let discovery = 0, calls = 0;
+    const harness = await installed(t, async () => { discovery++; return 32768; }, () => setting);
+    const options = fixture(), original = structuredClone(options.messages);
+    await collect(harness.stream(options, async function* (request) {
+      calls++; assert.deepEqual(request.messages, original);
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    }));
+    assert.equal(calls, 1); assert.equal(discovery, 0);
+  }
+});
+
+test('preferences are read per summary and the original prompt is restored between calls', async t => {
+  let settings = { summaryGuidance: true, summaryContextDivisor: 32 };
+  const harness = await installed(t, async () => 32768, () => settings);
+  for (const [enabled, divisor, target] of [[true, 32, 1024], [false, 32, null], [true, 16, 2048]]) {
+    settings = { summaryGuidance: enabled, summaryContextDivisor: divisor };
+    const options = fixture(), original = options.messages;
+    await collect(harness.stream(options, async function* (request) {
+      assert.equal(request.messages.at(-1).content[0].text, target === null ? nativePrompt : `${nativePrompt}\n- ${summaryInstruction(target)}`);
+      yield {};
+    }));
+    assert.strictEqual(options.messages, original);
+  }
+});
+
+test('disabling guidance or changing its divisor during discovery skips stale supplementation', async t => {
+  for (const change of [{ summaryGuidance: false, summaryContextDivisor: 16 }, { summaryGuidance: true, summaryContextDivisor: 32 }]) {
+    let settings = { summaryGuidance: true, summaryContextDivisor: 16 };
+    const harness = await installed(t, async () => { settings = change; return 32768; }, () => settings);
+    const options = fixture(), original = options.messages;
+    await collect(harness.stream(options, async function* (request) {
+      assert.strictEqual(request.messages, original); yield {};
+    }));
+  }
 });
 
 test('source estimate excludes native instruction, system prompt and tool schemas', () => {

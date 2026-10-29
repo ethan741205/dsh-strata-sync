@@ -2,6 +2,13 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## Summary guidance controls 0.9.0
+
+- Adds persisted `summaryGuidance` (default `true`) and `summaryContextDivisor` (default `16`). The divisor must be a positive safe integer. Saving these controls uses the existing backup, idle and revision checks and leaves model settings and compaction budgets unchanged.
+- Backend tests cover native schema defaults and validation, persisted controls across reloads, disabling without metadata requests, re-enabling with a custom divisor, unchanged native compaction, source/output bounds, and changes during discovery. The three-language UI tests cover default-on controls, saving, invalid input, external changes/conflicts, custom previews, disabled state and below-256 fallback messages.
+- A local probe exercised the installed DSH 0.2.1-rc.3 `BasicCompactionEngine.summarize()` through its actual Cordis waterfall. At 32K with a 4,096 summary cap, the default divisor produced 2,048, divisor 32 produced 1,024, disabled guidance preserved the native prompt without discovery, and divisor 8 remained capped at 2,048. Original prompt content, input, output cap, tools and configuration were preserved; unloading restored native behavior. Responses were synthetic: no inference requests were sent.
+- All **142 automated tests pass**, including the package verifier and 33 settings UI tests. These checks validate configuration and integration, not a measured reduction in real-model truncation or compaction frequency.
+
 ## Package rename and target ratio 0.8.1
 
 - Package identity, native bundle and client module now use `dsh-strata-sync`; the GitHub repository is unchanged. Existing scoped installations must be migrated, not loaded alongside the renamed plugin.

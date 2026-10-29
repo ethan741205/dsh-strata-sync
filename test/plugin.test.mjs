@@ -4,13 +4,21 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { apply } from '../src/plugin.mjs';
+import { apply, Config } from '../src/plugin.mjs';
 
 const PKG = 'dsh-strata-sync';
 const LLM = '@deepseek-ai/dsh-llm-pi-ai';
 const COMPACT = '@deepseek-ai/dsh-compaction-basic';
 const DEFAULT = '@deepseek-ai/dsh-agent-default-model';
 const PRESET = '@deepseek-ai/dsh-agent-preset';
+test('native config schema supplies summary defaults and validates persisted preferences', () => {
+  assert.equal(Config({}).summaryGuidance, true);
+  assert.equal(Config({}).summaryContextDivisor, 16);
+  assert.equal(Config({ summaryGuidance: false, summaryContextDivisor: 32 }).summaryGuidance, false);
+  for (const config of [{ summaryGuidance: 'true' }, ...[0, -1, 1.5, '16', Number.MAX_SAFE_INTEGER + 1].map(summaryContextDivisor => ({ summaryContextDivisor }))]) {
+    assert.throws(() => Config(config));
+  }
+});
 async function harness(options = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-sync-test-'));
   const documentPath = join(dir, 'cordis.patch.yml');
@@ -190,6 +198,70 @@ test('summary target respects a smaller existing client context without syncing 
     })) {}
     assert.equal(h.writes,0);
   } finally { await h.close(); }
+});
+
+test('summary preferences default on, save independently, survive reload and control native requests', async () => {
+  const h = await harness({ props: verifiedProps });
+  try {
+    const initial = (await h.call('status')).value;
+    assert.equal(initial.summaryGuidance, true);
+    assert.equal(initial.summaryContextDivisor, 16);
+    const others = structuredClone(h.entries.slice(0, 3));
+    const saved = await h.call('configure', { expectedRevision: initial.settingsRevision, summaryGuidance: false, summaryContextDivisor: 32 });
+    assert.equal(saved.ok, true);
+    assert.equal(saved.value.summaryGuidance, false);
+    assert.equal(saved.value.summaryContextDivisor, 32);
+    assert.deepEqual(h.entries.slice(0, 3), others);
+    assert.equal(await h.backupCount(), 1);
+    h.reload();
+    const off = (await h.call('status')).value;
+    assert.equal(off.summaryGuidance, false); assert.equal(off.summaryContextDivisor, 32);
+    const options = await summaryRequest(), original = structuredClone(options);
+    let calls = 0;
+    for await (const _ of h.stream(options, async function* () { calls++; assert.deepEqual(options, original); yield {}; })) {}
+    assert.equal(calls, 1); assert.equal(h.requests, 0);
+    const enabled = await h.call('configure', { expectedRevision: off.settingsRevision, summaryGuidance: true });
+    assert.equal(enabled.value.summaryContextDivisor, 32);
+    h.reload();
+    for await (const _ of h.stream(options, async function* () {
+      assert.match(options.messages.at(-1).content[0].text, /target of 1024 tokens/); yield {};
+    })) {}
+    assert.deepEqual(options, original);
+    assert.equal(h.writes, 2); assert.equal(h.requests, 3);
+    assert.deepEqual(h.entries.slice(0, 3), others);
+  } finally { await h.close(); }
+});
+
+test('summary preference validation rejects invalid values before backup and revision protects concurrent edits', async () => {
+  const h = await harness();
+  try {
+    const initial = (await h.call('status')).value;
+    for (const patch of [{ summaryGuidance: null }, { summaryGuidance: 1 },
+      ...[null, 0, -1, 1.5, '16', Number.MAX_SAFE_INTEGER + 1].map(summaryContextDivisor => ({ summaryContextDivisor }))]) {
+      const result = await h.call('configure', { expectedRevision: initial.settingsRevision, ...patch });
+      assert.equal(result.ok, false);
+      assert.ok(['invalid-budget', 'invalid-request'].includes(result.error.code));
+    }
+    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
+    h.entries[3].options.config.summaryContextDivisor = 64;
+    const stale = await h.call('configure', { expectedRevision: initial.settingsRevision, summaryGuidance: false });
+    assert.equal(stale.error.code, 'stale-settings');
+    assert.equal(h.writes, 0);
+  } finally { await h.close(); }
+});
+
+test('summary preference changes during discovery keep the original request', async () => {
+  for (const patch of [{ summaryGuidance: false }, { summaryContextDivisor: 32 }]) {
+    let h;
+    h = await harness({ props: verifiedProps, beforeFetch: async url => {
+      if (url.endsWith('/models')) Object.assign(h.entries[3].options.config, patch);
+    } });
+    try {
+      const options = await summaryRequest(), original = structuredClone(options);
+      for await (const _ of h.stream(options, async function* () { assert.deepEqual(options, original); yield {}; })) {}
+      assert.equal(h.writes, 0);
+    } finally { await h.close(); }
+  }
 });
 
 test('exact routes use the native owner-only admission boundary without server queries or writes', async () => {

@@ -91,13 +91,45 @@ window.__ModuleLoader__.load({
     "zh-Hant": "目標如何計算",
     "zh-Hans": "目标如何计算"
   },
-  "Before each supported Strata summary, calculates a length target and appends one sentence to DSH's native summary prompt.": {
-    "zh-Hant": "每次支援的 Strata 摘要請求前，計算長度目標，並在 DSH 原生摘要提示詞後補充一句。",
-    "zh-Hans": "每次支持的 Strata 摘要请求前，计算长度目标，并在 DSH 原生摘要提示词后补充一句。"
+  "When enabled, before each supported Strata summary, calculates a length target and appends one sentence to DSH's native summary prompt.": {
+    "zh-Hant": "啟用後，在每次支援的 Strata 摘要請求前，計算長度目標，並在 DSH 原生摘要提示詞後補充一句。",
+    "zh-Hans": "启用后，在每次支持的 Strata 摘要请求前，计算长度目标，并在 DSH 原生摘要提示词后补充一句。"
   },
-  "Target = floor(min(context / 16, summary output limit / 2, selected content estimate / 2)).": {
-    "zh-Hant": "目標 = floor(min(上下文 / 16, 摘要輸出上限 / 2, 待壓縮內容估算 / 2))。",
-    "zh-Hans": "目标 = floor(min(上下文 / 16, 摘要输出上限 / 2, 待压缩内容估算 / 2))。"
+  "Target = floor(min(context / N, summary output limit / 2, selected content estimate / 2)).": {
+    "zh-Hant": "目標 = floor(min(上下文 / N, 摘要輸出上限 / 2, 待壓縮內容估算 / 2))。",
+    "zh-Hans": "目标 = floor(min(上下文 / N, 摘要输出上限 / 2, 待压缩内容估算 / 2))。"
+  },
+  "Enable summary guidance": {
+    "zh-Hant": "啟用摘要提示補充",
+    "zh-Hans": "启用摘要提示补充"
+  },
+  "Enabled by default. Turning this off keeps DSH's native summary and automatic compaction behavior.": {
+    "zh-Hant": "預設開啟。關閉後保留 DSH 原生摘要與自動壓縮行為。",
+    "zh-Hans": "默认开启。关闭后保留 DSH 原生摘要与自动压缩行为。"
+  },
+  "Context divisor (context ÷ N)": {
+    "zh-Hant": "上下文除數（上下文 ÷ N）",
+    "zh-Hans": "上下文除数（上下文 ÷ N）"
+  },
+  "Default: 16. A smaller divisor allows a larger target, still bounded by half the summary output limit and half the selected content estimate.": {
+    "zh-Hant": "預設為 16。除數越小，允許的目標越大，但仍受摘要輸出上限的一半與待壓縮內容估算的一半限制。",
+    "zh-Hans": "默认为 16。除数越小，允许的目标越大，但仍受摘要输出上限的一半与待压缩内容估算的一半限制。"
+  },
+  "Enter a positive whole-number divisor.": {
+    "zh-Hant": "請輸入正整數除數。",
+    "zh-Hans": "请输入正整数除数。"
+  },
+  "This preview is below the 256-token minimum. The native summary prompt remains unchanged.": {
+    "zh-Hant": "本次預覽低於 256 tokens 的最低目標，將保留原生摘要提示詞。",
+    "zh-Hans": "本次预览低于 256 tokens 的最低目标，将保留原生摘要提示词。"
+  },
+  "Summary guidance is off. No extra sentence is added to the native prompt.": {
+    "zh-Hant": "摘要提示補充已關閉，不會在原生提示詞中加上額外句子。",
+    "zh-Hans": "摘要提示补充已关闭，不会在原生提示词中添加额外句子。"
+  },
+  "Save preferences to apply these controls to subsequent summary requests; other model and compaction settings stay unchanged.": {
+    "zh-Hant": "儲存偏好後，這些控制項會套用至後續摘要請求；其他模型與壓縮設定保持不變。",
+    "zh-Hans": "保存偏好后，这些控制项将应用于后续摘要请求；其他模型与压缩设置保持不变。"
   },
   "Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.": {
     "zh-Hant": "上下文採用已確認的 Strata 視窗與 DSH 既有模型視窗的較小值。預覽上限依提議預算計算，既有對話設定可能讓實際目標更低。",
@@ -367,19 +399,19 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       };
       const diagnostic = (message) => translations[message] ? t(message) : language === 'en' ? message : t('Server diagnostic: ') + message;
       const [state,setState] = React.useState(null), [preview,setPreview] = React.useState(null), [result,setResult] = React.useState(null);
-      const [form,setForm] = React.useState({providerId:'',output:'',manual:false,auto:false,follow:true});
+      const [form,setForm] = React.useState({providerId:'',output:'',manual:false,auto:false,follow:true,summaryGuidance:true,summaryDivisor:'16'});
       const [pending,setPending] = React.useState(false), [error,setError] = React.useState(''), [loadError,setLoadError] = React.useState('');
       const [notice,setNotice] = React.useState(''), [conflict,setConflict] = React.useState(false);
       const formRef=React.useRef(form), baseline=React.useRef(null), requestSeq=React.useRef(0), alive=React.useRef(true);
-      const values = (f) => ({providerId:f.providerId,outputTokens:f.manual ? (f.output.trim()==='' ? NaN : Number(f.output)) : null,autoSync:f.auto,followLoadedModel:f.follow});
-      const preferences = (s) => ({providerId:s.providerId || '',outputTokens:s.outputTokens ?? null,autoSync:!!s.autoSync,followLoadedModel:s.followLoadedModel !== false});
+      const values = (f) => ({providerId:f.providerId,outputTokens:f.manual ? (f.output.trim()==='' ? NaN : Number(f.output)) : null,autoSync:f.auto,followLoadedModel:f.follow,summaryGuidance:f.summaryGuidance,summaryContextDivisor:f.summaryDivisor.trim()===''?NaN:Number(f.summaryDivisor)});
+      const preferences = (s) => ({providerId:s.providerId || '',outputTokens:s.outputTokens ?? null,autoSync:!!s.autoSync,followLoadedModel:s.followLoadedModel !== false,summaryGuidance:s.summaryGuidance!==false,summaryContextDivisor:s.summaryContextDivisor??16});
       const equal = (a,b) => Object.keys(a).every(key=>Object.is(a[key],b[key]));
       const acceptStatus = React.useCallback((s,force=false) => {
         if (!alive.current) return;
         const next=preferences(s), old=baseline.current;
         const untouched=!old || equal(values(formRef.current),old.values);
         if (force || untouched) {
-          const nextForm={providerId:next.providerId,output:next.outputTokens==null?'':String(next.outputTokens),manual:next.outputTokens!=null,auto:next.autoSync,follow:next.followLoadedModel};
+          const nextForm={providerId:next.providerId,output:next.outputTokens==null?'':String(next.outputTokens),manual:next.outputTokens!=null,auto:next.autoSync,follow:next.followLoadedModel,summaryGuidance:next.summaryGuidance,summaryDivisor:String(next.summaryContextDivisor)};
           formRef.current=nextForm; setForm(nextForm); setConflict(false);
           baseline.current={values:next,revision:s.settingsRevision};
         } else if (old.revision!==s.settingsRevision || !equal(old.values,next)) {
@@ -411,12 +443,13 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           else setError(e.code==='unsupported-route'?'This provider uses an unsupported model catalog configuration. Configure an explicit custom model list in DSH before syncing.':e.message||'The operation failed.');
         } finally { if(alive.current)setPending(false); }
       }
-      const draft=values(form), valid=draft.outputTokens===null || Number.isSafeInteger(draft.outputTokens)&&draft.outputTokens>0;
+      const draft=values(form), validDivisor=Number.isSafeInteger(draft.summaryContextDivisor)&&draft.summaryContextDivisor>0;
+      const valid=validDivisor&&(draft.outputTokens===null || Number.isSafeInteger(draft.outputTokens)&&draft.outputTokens>0);
       const dirty=!!baseline.current&&!equal(draft,baseline.current.values);
       const displayedResult=!result || state?.lastApplied?.at>result.at ? state?.lastApplied : result;
       const activeBudget=preview?.budget;
-      const summaryTargetCeiling=Number.isSafeInteger(activeBudget?.contextWindow)&&activeBudget.contextWindow>0&&Number.isSafeInteger(activeBudget?.summaryMaxTokens)&&activeBudget.summaryMaxTokens>0
-        ? Math.floor(Math.min(activeBudget.contextWindow/16,activeBudget.summaryMaxTokens/2)) : null;
+      const summaryTargetCeiling=form.summaryGuidance&&validDivisor&&Number.isSafeInteger(activeBudget?.contextWindow)&&activeBudget.contextWindow>0&&Number.isSafeInteger(activeBudget?.summaryMaxTokens)&&activeBudget.summaryMaxTokens>0
+        ? Math.floor(Math.min(activeBudget.contextWindow/draft.summaryContextDivisor,activeBudget.summaryMaxTokens/2)) : null;
       const outputSource=(budget)=>t(({server:'Strata Server default',manual:'Manual override',calculated:'Automatic calculation'})[budget?.outputSource]||'Automatic calculation');
       const preserved=(view)=>{
         const status=view?.capabilityStatus;
@@ -458,6 +491,27 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.follow,onChange:e=>edit({follow:e.target.checked}),disabled:pending||!state}),t('Follow the loaded Strata model as the default')),
         h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.auto,onChange:e=>edit({auto:e.target.checked}),disabled:pending||!state}),t('Automatically sync when DSH starts')),
         h('p',{className:'ss-muted'},t('Runs once on the next DSH start. Waits for running tasks to finish; no periodic server checks.')),
+        h('div',{className:'ss-card','data-testid':'summary-target'},
+          h('strong',null,t('Dynamic summary target')),
+          h('label',{className:'ss-check'},h('input',{type:'checkbox','data-testid':'summary-guidance-toggle','aria-label':t('Enable summary guidance'),checked:form.summaryGuidance,onChange:e=>edit({summaryGuidance:e.target.checked}),disabled:pending||!state}),t('Enable summary guidance')),
+          h('p',{className:'ss-muted'},t("Enabled by default. Turning this off keeps DSH's native summary and automatic compaction behavior.")),
+          h('label',null,t('Context divisor (context ÷ N)'),h('input',{type:'number','data-testid':'summary-divisor','aria-label':t('Context divisor (context ÷ N)'),'aria-invalid':!validDivisor,min:1,max:Number.MAX_SAFE_INTEGER,step:1,value:form.summaryDivisor,onChange:e=>edit({summaryDivisor:e.target.value}),disabled:pending||!state})),
+          state&&!validDivisor&&h('p',{className:'ss-status ss-error',role:'alert'},t('Enter a positive whole-number divisor.')),
+          h('p',{className:'ss-muted'},t('Default: 16. A smaller divisor allows a larger target, still bounded by half the summary output limit and half the selected content estimate.')),
+          h('p',{className:'ss-muted'},t('Save preferences to apply these controls to subsequent summary requests; other model and compaction settings stay unchanged.')),
+          !form.summaryGuidance&&h('p',{className:'ss-status','data-testid':'summary-guidance-off'},t('Summary guidance is off. No extra sentence is added to the native prompt.')),
+          h('p',null,t("When enabled, before each supported Strata summary, calculates a length target and appends one sentence to DSH's native summary prompt.")),
+          summaryTargetCeiling!==null&&(summaryTargetCeiling>=256
+            ? h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens')
+            : h('p',{className:'ss-status','data-testid':'summary-target-native'},t('This preview is below the 256-token minimum. The native summary prompt remains unchanged.'))),
+          h('details',{className:'ss-details'},h('summary',null,t('How the target is calculated')),
+            h('p',{className:'ss-muted'},t('Target = floor(min(context / N, summary output limit / 2, selected content estimate / 2)).')),
+            h('p',{className:'ss-muted'},t('Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.')),
+            h('p',{className:'ss-muted'},t('The actual target may be lower for shorter content. System prompts and tool schemas are excluded from the content estimate.')),
+            h('p',{className:'ss-muted'},t('The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.')),
+            h('p',{className:'ss-muted'},t('Targets below 256 tokens leave the original prompt unchanged; the native summary still runs.')),
+            h('p',{className:'ss-muted'},t('If the route or native summary format cannot be verified, DSH uses its original prompt.')),
+            h('p',{className:'ss-muted'},t('Unpriced image/file attachments, cancellation or a disabled plugin preserve native request handling.')))),
         h('div',{className:'ss-actions'},
           h('button',{disabled:pending||!state||!form.providerId||!valid||!dirty||conflict,onClick:()=>action(async()=>{
             const changes=Object.fromEntries(Object.entries(values(formRef.current)).filter(([key,value])=>!Object.is(value,baseline.current.values[key])));
@@ -472,18 +526,6 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
             setPreview(null);setNotice(r.applied?'Synced and backed up the original settings. Start a new conversation to use the updated compaction policy.':'Settings already match. No changes needed.');await refresh();
           })},t('Back up and sync'))),
         dirty&&!conflict&&h('p',{className:'ss-muted'},t('Save preferences before checking for differences.')),
-        h('div',{className:'ss-card','data-testid':'summary-target'},
-          h('strong',null,t('Dynamic summary target')),
-          h('p',null,t("Before each supported Strata summary, calculates a length target and appends one sentence to DSH's native summary prompt.")),
-          summaryTargetCeiling!==null&&h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens'),
-          h('details',{className:'ss-details'},h('summary',null,t('How the target is calculated')),
-            h('p',{className:'ss-muted'},t('Target = floor(min(context / 16, summary output limit / 2, selected content estimate / 2)).')),
-            h('p',{className:'ss-muted'},t('Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.')),
-            h('p',{className:'ss-muted'},t('The actual target may be lower for shorter content. System prompts and tool schemas are excluded from the content estimate.')),
-            h('p',{className:'ss-muted'},t('The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.')),
-            h('p',{className:'ss-muted'},t('Targets below 256 tokens leave the original prompt unchanged; the native summary still runs.')),
-            h('p',{className:'ss-muted'},t('If the route or native summary format cannot be verified, DSH uses its original prompt.')),
-            h('p',{className:'ss-muted'},t('Unpriced image/file attachments, cancellation or a disabled plugin preserve native request handling.')))),
         preview&&h('div',{className:'ss-card'},
           h('strong',null,'Strata Server'),h('p',null,h('code',null,preview.server?.model?.id)),
           h('div',{className:'ss-grid'},

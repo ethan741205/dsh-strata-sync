@@ -88,6 +88,13 @@ async function mount({ initial = status(), previewResult = preview(), failEndpoi
         input.dispatchEvent(new window.Event('input', { bubbles: true }));
       });
     },
+    async setDivisor(value) {
+      const input=container.querySelector('[data-testid="summary-divisor"]');
+      await act(async()=>{
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set.call(input,value);
+        input.dispatchEvent(new window.Event('input',{bubbles:true}));
+      });
+    },
     async unmount() {
       if (unmounted) return; unmounted = true;
       await act(async () => { root.unmount(); });
@@ -108,13 +115,16 @@ test('native module loader registers an English Settings section without display
   assert.match(details.container.textContent, /Choose an existing provider/);
 });
 
-test('summary guidance shows a preview ceiling without adding preferences or inference requests', async t => {
+test('summary guidance defaults on with divisor 16 and preview does not write preferences or infer', async t => {
   const ui=await mount();t.after(()=>ui.unmount());
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.match(card.textContent,/Dynamic summary target/);
   assert.match(card.textContent,/appends one sentence/);
   assert.match(card.textContent,/not a guaranteed length or an optimal value/);
-  assert.equal(card.querySelectorAll('input,select,button').length,0);
+  assert.equal(card.querySelectorAll('input,select,button').length,2);
+  assert.equal(card.querySelector('[data-testid="summary-guidance-toggle"]').checked,true);
+  assert.equal(card.querySelector('[data-testid="summary-divisor"]').value,'16');
+  assert.match(card.textContent,/Turning this off keeps DSH's native summary and automatic compaction behavior/);
   assert.equal(card.querySelector('[data-testid="summary-target-ceiling"]'),null);
   assert.equal(card.querySelector('details').open,false);
   await ui.click(ui.button('Check differences'));
@@ -133,6 +143,98 @@ test('summary preview ceiling follows context and summary cap without claiming t
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.match(card.querySelector('[data-testid="summary-target-ceiling"]').textContent,/2,048 tokens/);
   assert.match(card.textContent,/actual target may be lower/);
+});
+
+test('summary controls save only changed preferences with their revision and persist off state',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  await ui.click(ui.container.querySelector('[data-testid="summary-guidance-toggle"]'));
+  await ui.setDivisor('32');
+  assert.equal(ui.button('Check differences').disabled,true);
+  await ui.click(ui.button('Save preferences'));
+  const saved=ui.calls.find(call=>call.name==='configure').payload;
+  assert.deepEqual(JSON.parse(JSON.stringify(saved)),{summaryGuidance:false,summaryContextDivisor:32,expectedRevision:'prefs-1'});
+  assert.equal(ui.button('Save preferences').disabled,true);
+  await ui.poll();
+  assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').checked,false);
+  assert.equal(ui.container.querySelector('[data-testid="summary-divisor"]').value,'32');
+  await ui.click(ui.button('Check differences'));
+  assert.equal(ui.container.querySelector('[data-testid="summary-target-ceiling"]'),null);
+  assert.match(ui.container.querySelector('[data-testid="summary-guidance-off"]').textContent,/No extra sentence/);
+  assert.equal(ui.calls.some(call=>call.name==='apply'),false);
+});
+
+test('saved divisor changes the preview while the summary output bound still applies',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  for(const [divisor,ceiling]of [['32','1,024'],['8','2,048'],['1','2,048']]){
+    await ui.setDivisor(divisor);
+    await ui.click(ui.button('Save preferences'));
+    await ui.click(ui.button('Check differences'));
+    assert.match(ui.container.querySelector('[data-testid="summary-target-ceiling"]').textContent,new RegExp(ceiling+' tokens'));
+  }
+  assert.equal(ui.calls.filter(call=>call.name==='configure').length,3);
+});
+
+test('preview below the summary target minimum shows native fallback in all locales',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  await ui.setDivisor('256');
+  await ui.click(ui.button('Save preferences'));
+  await ui.click(ui.button('Check differences'));
+  for(const [locale,message]of [
+    ['en','The native summary prompt remains unchanged.'],
+    ['zh-Hant','將保留原生摘要提示詞'],
+    ['zh-Hans','将保留原生摘要提示词']]){
+    await ui.changeLanguage(locale);
+    assert.equal(ui.container.querySelector('[data-testid="summary-target-ceiling"]'),null);
+    assert.ok(ui.container.querySelector('[data-testid="summary-target-native"]').textContent.includes(message));
+  }
+});
+
+test('invalid divisors produce local errors and cannot be saved or sent to preview',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  for(const value of ['','0','-1','1.5','9007199254740992']){
+    await ui.setDivisor(value);
+    assert.equal(ui.container.querySelector('[data-testid="summary-divisor"]').getAttribute('aria-invalid'),'true');
+    assert.match(ui.container.querySelector('[role="alert"]').textContent,/positive whole-number divisor/);
+    assert.equal(ui.button('Save preferences').disabled,true);
+    assert.equal(ui.button('Check differences').disabled,true);
+    await ui.click(ui.button('Save preferences'));
+    await ui.click(ui.button('Check differences'));
+  }
+  assert.equal(ui.calls.some(call=>call.name==='configure'||call.name==='preview'),false);
+  await ui.setDivisor('32');
+  assert.equal(ui.container.querySelector('[role="alert"]'),null);
+  assert.equal(ui.button('Save preferences').disabled,false);
+});
+
+test('summary toggle, divisor and validation follow all three DSH locales',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  await ui.setDivisor('0');
+  for(const [locale,toggle,divisor,error]of [
+    ['en','Enable summary guidance','Context divisor (context ÷ N)','Enter a positive whole-number divisor'],
+    ['zh-Hant','啟用摘要提示補充','上下文除數（上下文 ÷ N）','請輸入正整數除數'],
+    ['zh-Hans','启用摘要提示补充','上下文除数（上下文 ÷ N）','请输入正整数除数']]){
+    await ui.changeLanguage(locale);
+    assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').getAttribute('aria-label'),toggle);
+    assert.equal(ui.container.querySelector('[data-testid="summary-divisor"]').getAttribute('aria-label'),divisor);
+    assert.ok(ui.container.querySelector('[role="alert"]').textContent.includes(error));
+  }
+  assert.equal(ui.calls.some(call=>call.name==='configure'),false);
+});
+
+test('summary preferences follow external changes and reject conflicting dirty forms',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  ui.setStatus({summaryGuidance:false,summaryContextDivisor:32,settingsRevision:'prefs-2'});await ui.poll();
+  assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').checked,false);
+  assert.equal(ui.container.querySelector('[data-testid="summary-divisor"]').value,'32');
+  assert.equal(ui.button('Save preferences').disabled,true);
+  await ui.setDivisor('64');
+  ui.setStatus({summaryContextDivisor:8,settingsRevision:'prefs-3'});await ui.poll();
+  assert.equal(ui.container.querySelector('[data-testid="summary-divisor"]').value,'64');
+  assert.equal(ui.button('Save preferences').disabled,true);
+  assert.match(ui.container.textContent,/Preferences changed in another window/);
+  await ui.click(ui.button('Reload latest preferences'));
+  assert.equal(ui.container.querySelector('[data-testid="summary-divisor"]').value,'8');
+  assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').checked,false);
 });
 
 test('summary guidance follows DSH Chinese locales without changing preferences', async t => {

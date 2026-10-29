@@ -7,10 +7,11 @@ const positive = value => Number.isSafeInteger(value) && value > 0;
 // Eight mandatory headings need enough space for a meaningful checkpoint. Do
 // not round a tiny target UP; leave native behavior intact instead.
 export const MIN_SUMMARY_TARGET = 256;
+export const DEFAULT_SUMMARY_DIVISOR = 16;
 
-export function planSummaryTarget(contextWindow, summaryMaxTokens, sourceTokens) {
-  if (![contextWindow, summaryMaxTokens, sourceTokens].every(positive)) return null;
-  const target = Math.floor(Math.min(contextWindow / 16, summaryMaxTokens / 2, sourceTokens / 2));
+export function planSummaryTarget(contextWindow, summaryMaxTokens, sourceTokens, divisor = DEFAULT_SUMMARY_DIVISOR) {
+  if (![contextWindow, summaryMaxTokens, sourceTokens, divisor].every(positive)) return null;
+  const target = Math.floor(Math.min(contextWindow / divisor, summaryMaxTokens / 2, sourceTokens / 2));
   return target >= MIN_SUMMARY_TARGET ? target : null;
 }
 
@@ -65,12 +66,24 @@ export function estimateSummarySource(messages) {
  * messages property for the lifetime of this stream; never mutate frozen
  * messages or recursively dispatch a second LLM request.
  */
-export function installSummaryGuidance(ctx, resolveContext) {
+export function installSummaryGuidance(ctx, resolveContext, getSettings = () => ({})) {
   let closed = false;
+  function preferences() {
+    try {
+      const value = getSettings();
+      const enabled = value.summaryGuidance === undefined ? true : value.summaryGuidance;
+      const divisor = value.summaryContextDivisor === undefined ? DEFAULT_SUMMARY_DIVISOR : value.summaryContextDivisor;
+      return enabled === true && positive(divisor) ? { divisor } : null;
+    } catch { return null; }
+  }
   const remove = ctx.on('llm/stream', (options, next) => {
     const native = nativeSummaryMessage(options);
     const descriptor = options && Object.getOwnPropertyDescriptor(options, 'messages');
     if (closed || !native || !descriptor?.writable || options.signal?.aborted) return next();
+    // Disabled guidance must not perform even metadata discovery. Native DSH
+    // compaction and its request options still pass through unchanged.
+    const selected = preferences();
+    if (!selected) return next();
     const sourceTokens = estimateSummarySource(options.messages);
     if (!positive(sourceTokens) || !positive(options.maxTokens)) return next();
     return (async function* () {
@@ -80,8 +93,9 @@ export function installSummaryGuidance(ctx, resolveContext) {
         let contextWindow;
         try { contextWindow = await resolveContext(options); }
         catch { /* Metadata/compatibility failure must not break native inference. */ }
-        const target = planSummaryTarget(contextWindow, options.maxTokens, sourceTokens);
-        if (!closed && !options.signal?.aborted && target !== null && options.messages === original) {
+        const target = planSummaryTarget(contextWindow, options.maxTokens, sourceTokens, selected.divisor);
+        const current = preferences();
+        if (!closed && !options.signal?.aborted && current?.divisor === selected.divisor && target !== null && options.messages === original) {
           const last = { ...native, content: [{ ...native.content[0], text: `${native.content[0].text}\n- ${summaryInstruction(target)}` }] };
           augmented = [...original.slice(0, -1), last];
           options.messages = augmented;
