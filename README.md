@@ -2,9 +2,9 @@
 
 A community plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded by **Strata Server**, using a native DSH settings UI. This is not an official DeepSeek or Strata product.
 
-繁體中文介面，適用於已設定 Strata 供應者的 DSH。從 **外掛 → Strata Sync** 檢查差異、同步，或啟用閒置時自動同步。
+Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization while DSH is idle. The interface and documentation are in English.
 
-![Native DSH Strata Sync settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview.jpg)
+![Native DSH Strata Sync settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview.jpg?v=0.2.0)
 
 ## What it does
 
@@ -36,22 +36,28 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.1.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.2.0.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
 
 For the desktop profile, fully quit DSH Desktop before using the CLI installer, then reopen it. The bundle is automatically selected on its first installation; an already installed but disabled bundle must be enabled in DSH's plugin manager.
 
-Then open **Plugins / 外掛 → Strata Sync**:
+Then open **Settings → Strata Sync**:
 
 1. Choose the existing Strata provider and save preferences.
-2. Click **檢查差異** to read the loaded model and preview the proposed settings.
-3. Click **備份並同步** while DSH is idle.
-4. Optionally enable **閒置時自動同步** and save. Auto-sync defaults to off.
+2. Click **Check differences** to read the loaded model and preview the proposed settings.
+3. Click **Back up and sync** while DSH is idle.
+4. Optionally enable **Automatically sync while idle** and save. Auto-sync defaults to off.
 5. Start a new conversation to use the new Agent preset revision.
 
 No API key needs to be copied into this plugin. Set up or repair credentials in DSH Models settings.
+
+## Changes in 0.2.0
+
+- Moves the Strata Sync interface into DSH's native **Settings** navigation.
+- Uses English throughout the interface and repository documentation.
+- Preserves the synchronization policy, optional idle polling, backups and existing-conversation behavior described below.
 
 ## Budget policy
 
@@ -93,7 +99,7 @@ npm run build
 npm pack --dry-run
 ```
 
-The 35 automated tests cover metadata validation, credentials/redirect safety, budgets, busy-state guards, stale previews, preservation of unrelated settings, rollback, automatic polling, HMR context, preset activation and UI behavior. Tests use simulated endpoints and DSH services; they do not generate model responses. See [native-host validation](docs/VALIDATION.md) for the isolated DSH UI check.
+Automated tests cover metadata validation, credentials/redirect safety, budgets, busy-state guards, stale previews, preservation of unrelated settings, rollback, automatic polling, HMR context, preset activation and UI behavior. Tests use simulated endpoints and DSH services; they do not generate model responses. See [validation notes](docs/VALIDATION.md) for the verified version and the isolated native-host checks.
 
 References: [DSH compaction documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md), [Strata](https://github.com/Niko1221/Strata).
 
