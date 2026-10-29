@@ -27,7 +27,8 @@ function preview(overrides = {}) {
     ...overrides };
 }
 
-async function mount({ initial = status(), previewResult = preview(), failEndpoint, initialStatusGate, storage = new Map() } = {}) {
+async function mount({ initial = status(), previewResult = preview(), failEndpoint, initialStatusGate, storage = new Map(), locale = 'en' } = {}) {
+  const localeListeners = new Set();
   const calls = [], intervals = new Map(), effectDisposers = [];
   let plugin, registration, component, current = initial, timerId = 0, unmounted = false, statusReads = 0;
   vm.runInNewContext(source, {
@@ -38,8 +39,9 @@ async function mount({ initial = status(), previewResult = preview(), failEndpoi
     setInterval(callback, delay) { const id = ++timerId; intervals.set(id, { callback, delay }); return id; },
     clearInterval(id) { intervals.delete(id); },
   });
-  assert.deepEqual([...plugin.inject].sort(), ['connection', 'slots']);
+  assert.deepEqual([...plugin.inject].sort(), ['connection', 'locale', 'slots']);
   plugin.apply({
+    locale: { getLocale: () => ({active: locale}), subscribe: fn => { localeListeners.add(fn); return () => localeListeners.delete(fn); } },
     connection: { rpc: { async call(channel, endpoint, payload) {
       const name = endpoint.replace(/^strata-sync\//, '');
       calls.push({ channel, name, payload });
@@ -64,7 +66,8 @@ async function mount({ initial = status(), previewResult = preview(), failEndpoi
   const root = createRoot(container);
   await act(async () => { root.render(React.createElement(component, registration.inject())); });
   return {
-    container, calls, intervals,
+    container, calls, intervals, localeListeners,
+    async changeLanguage(value) { await act(async () => { locale=value; for(const fn of localeListeners) fn(); }); },
     button(label) { const button = [...container.querySelectorAll('button')].find(node => node.textContent === label); assert.ok(button, `Missing button ${label}`); return button; },
     async click(button) { await act(async () => { button.click(); }); },
     async setOutput(value) {
@@ -164,13 +167,7 @@ test('initial loading disables controls until authoritative preferences arrive',
   assert.equal(ui.button('Back up and sync').disabled, true);
 });
 
-async function changeLanguage(ui, value) {
-  await act(async () => {
-    const select = ui.container.querySelector('select[aria-label="Language"]');
-    select.value = value;
-    select.dispatchEvent(new window.Event('change', { bubbles: true }));
-  });
-}
+async function changeLanguage(ui, value) { await ui.changeLanguage(value); }
 
 test('Chinese locales translate previews and notices without changing synchronization preferences', async t => {
   const ui = await mount({ previewResult: preview({ server: { model: { id: 'qwen-local' }, warnings: ['SLOTS_CONTEXT_UNAVAILABLE'] } }) });
@@ -191,15 +188,16 @@ test('Chinese locales translate previews and notices without changing synchroniz
   assert.match(ui.container.textContent, /已同步並備份/);
 });
 
-test('language persists locally across remounts and invalid values fall back to English', async t => {
-  const storage = new Map();
-  const first = await mount({ storage });
-  await changeLanguage(first, 'zh-Hant');
-  await first.unmount();
-  const second = await mount({ storage }); t.after(() => second.unmount());
-  assert.ok(second.button('檢查差異'));
-  const invalid = await mount({ storage: new Map([['strata-sync.language', 'invalid']]) }); t.after(() => invalid.unmount());
-  assert.ok(invalid.button('Check differences'));
+test('DSH locale owns the UI; stale local preference is ignored, unknown locales use English', async t => {
+  for (const [locale, label] of [['zh-TW','檢查差異'],['zh','检查差异'],['zh-HK','檢查差異'],['zh-CN','检查差异'],['fr','Check differences']]) {
+    const ui = await mount({locale,storage:new Map([['strata-sync.language','en']])});
+    assert.ok(ui.button(label));
+    assert.equal(ui.container.querySelector('[aria-label="Language"]'),null);
+    assert.doesNotMatch(ui.container.textContent,/community plugin|官方產品|官方产品/);
+    assert.equal(ui.localeListeners.size,1);
+    await ui.unmount();
+    assert.equal(ui.localeListeners.size,0);
+  }
 });
 
 test('unknown backend diagnostics remain intact with a localized label', async t => {

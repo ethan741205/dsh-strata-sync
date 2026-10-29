@@ -5,6 +5,10 @@ window.__ModuleLoader__.load({
     const React = require('react');
     const h = React.createElement;
     const translations = {
+  "Runs once on the next DSH start. Waits for running tasks to finish; no periodic server checks.": {
+    "zh-Hant": "下次啟動 DSH 時同步一次；若有工作執行中，會等到閒置，不再定期檢查伺服器。",
+    "zh-Hans": "下次启动 DSH 时同步一次；如有任务运行中，会等待空闲，不再定期检查服务器。"
+  },
   "Image": {"zh-Hant":"圖片","zh-Hans":"图片"},
   "View mapping": {"zh-Hant":"查看參數對應","zh-Hans":"查看参数映射"},
 
@@ -119,9 +123,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "操作失敗。",
     "zh-Hans": "操作失败。"
   },
-  "Align DSH with the model loaded by Strata Server. The server reports the model and context; this plugin calculates output and compaction budgets. A community plugin, not an official Strata or DeepSeek product.": {
-    "zh-Hant": "讓 DSH 對齊 Strata Server 已載入的模型。模型與上下文由伺服器提供，輸出與壓縮預算由此外掛計算。這是社群外掛，非 Strata 或 DeepSeek 官方產品。",
-    "zh-Hans": "让 DSH 对齐 Strata Server 已加载的模型。模型与上下文由服务器提供，输出与压缩预算由此插件计算。这是社区插件，非 Strata 或 DeepSeek 官方产品。"
+  "Align DSH with the model loaded by Strata Server. The server reports the model and context; this plugin calculates output and compaction budgets.": {
+    "zh-Hant": "讓 DSH 對齊 Strata Server 已載入的模型。模型與上下文由伺服器提供，輸出與壓縮預算由此外掛計算。",
+    "zh-Hans": "让 DSH 对齐 Strata Server 已加载的模型。模型与上下文由服务器提供，输出与压缩预算由此插件计算。"
   },
   "Loading sync settings...": {
     "zh-Hant": "正在載入同步設定…",
@@ -155,9 +159,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "預設模型跟隨 Strata 已載入的模型",
     "zh-Hans": "默认模型跟随 Strata 已加载的模型"
   },
-  "Automatically sync while idle (check every 60 seconds)": {
-    "zh-Hant": "閒置時自動同步（每 60 秒檢查）",
-    "zh-Hans": "空闲时自动同步（每 60 秒检查）"
+  "Automatically sync when DSH starts": {
+    "zh-Hant": "啟動 DSH 時自動同步",
+    "zh-Hans": "启动 DSH 时自动同步"
   },
   "Sync preferences saved.": {
     "zh-Hant": "同步偏好已儲存。",
@@ -247,10 +251,6 @@ window.__ModuleLoader__.load({
     "zh-Hant": "Strata Sync 尚未就緒。",
     "zh-Hans": "Strata Sync 尚未就绪。"
   },
-  "Language": {
-    "zh-Hant": "語言",
-    "zh-Hans": "语言"
-  },
   "Server diagnostic: ": {
     "zh-Hant": "伺服器診斷：",
     "zh-Hans": "服务器诊断："
@@ -272,8 +272,13 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       SLOTS_CONTEXT_UNAVAILABLE: 'Live slots do not report a context size. Using the model context reported by Strata.',
       SLOTS_OVERRIDE_MODEL_CONTEXT: 'The active engine context differs from the model metadata. Using the active engine context.',
     };
-    function SettingsPage({ rpc }) {
-      const [language, setLanguage] = React.useState(() => { try { const saved = window.localStorage?.getItem('strata-sync.language'); return ['en','zh-Hans','zh-Hant'].includes(saved) ? saved : 'en'; } catch { return 'en'; } });
+    function normalizeLanguage(id) {
+      const tag = String(id || 'en').toLowerCase();
+      if (/^zh(?:-|$)/.test(tag)) return /(?:hant|tw|hk|mo)(?:-|$)/.test(tag) ? 'zh-Hant' : 'zh-Hans';
+      return 'en';
+    }
+    function SettingsPage({ rpc, localeStore }) {
+      const language = normalizeLanguage(React.useSyncExternalStore(localeStore.subscribe, localeStore.getSnapshot, localeStore.getSnapshot));
       const t = (text) => translations[text]?.[language] ?? text;
       const format = (value) => value == null ? t('Not set') : typeof value === 'string' ? t(value) : fmt(value);
       const renderValue = (field,value) => {
@@ -307,9 +312,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       const dirty = !!state && (providerId !== state.providerId || outputTokens !== state.outputTokens || auto !== state.autoSync || follow !== state.followLoadedModel);
       return h('section', {className:'strata-sync', 'aria-label':'Strata Sync'},
         h('style', null, css),
-        h('label',null,t('Language'),h('select',{'aria-label':'Language',value:language,onChange:e=>{ const next=e.target.value; setLanguage(next); try { window.localStorage?.setItem('strata-sync.language',next); } catch {} }},
-          h('option',{value:'en'},'English'),h('option',{value:'zh-Hans'},'简体中文'),h('option',{value:'zh-Hant'},'繁體中文'))),
-        h('header', null, h('h2',null,'Strata Sync'), h('p',{className:'ss-muted'},t("Align DSH with the model loaded by Strata Server. The server reports the model and context; this plugin calculates output and compaction budgets. A community plugin, not an official Strata or DeepSeek product."))),
+        h('header', null, h('h2',null,'Strata Sync'), h('p',{className:'ss-muted'},t("Align DSH with the model loaded by Strata Server. The server reports the model and context; this plugin calculates output and compaction budgets."))),
         !state && !error && h('div',{className:'ss-status',role:'status'},t("Loading sync settings...")),
         state?.busy && h('div',{className:'ss-status',role:'status'},t("DSH is running a task. Synchronization will wait until all tasks are idle.")),
         error && h('div',{className:'ss-status ss-error',role:'alert'},diagnostic(error)),
@@ -320,7 +323,8 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           h('label',null,t("Response output limit (blank for automatic)"),h('input',{type:'number',min:1,step:1,value:output,placeholder:t("30% of context, up to 16,384"),onChange:e=>{setOutput(e.target.value);setPreview(null);},disabled:pending||!state}))),
         h('p',{className:'ss-muted'},t("Uses the URL and credentials already configured in DSH. API keys are never displayed or copied here.")),
         h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:follow,onChange:e=>{setFollow(e.target.checked);setPreview(null);},disabled:pending||!state}),t("Follow the loaded Strata model as the default")),
-        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:auto,onChange:e=>setAuto(e.target.checked),disabled:pending||!state}),t("Automatically sync while idle (check every 60 seconds)")),
+        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:auto,onChange:e=>setAuto(e.target.checked),disabled:pending||!state}),t("Automatically sync when DSH starts")),
+        h('p',{className:'ss-muted'},t("Runs once on the next DSH start. Waits for running tasks to finish; no periodic server checks.")),
         h('div',{className:'ss-actions'},
           h('button',{disabled:pending||!providerId||!valid||!dirty,onClick:()=>action(async()=>{const s=await rpc('configure',{providerId,autoSync:auto,followLoadedModel:follow,outputTokens});setState(s);setPreview(null);setNotice('Sync preferences saved.');})},t("Save preferences")),
           h('button',{disabled:pending||!providerId||dirty||!valid,onClick:()=>action(async()=>{setPreview(await rpc('preview',{providerId}));await refresh();})},pending?t("Working..."):t("Check differences")),
@@ -349,15 +353,19 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         state?.lastError && h('div',{className:'ss-status ss-error'},diagnostic(typeof state.lastError==='string'?state.lastError:state.lastError.message)));
     }
     function apply(ctx) {
+      const localeStore = {
+        subscribe: listener => ctx.locale.subscribe(listener),
+        getSnapshot: () => ctx.locale.getLocale().active,
+      };
       const rpc = async (endpoint,payload) => {
         const result = await ctx.connection.rpc.call('/api','strata-sync/'+endpoint,payload);
         if (!result?.ok) throw new Error(result?.error?.message || 'Strata Sync is not ready.');
         return result.value;
       };
       ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
-        name:'settings.section',id:'strata-sync',order:25,label:()=> 'Strata Sync',inject:()=>({rpc}),
+        name:'settings.section',id:'strata-sync',order:25,label:()=> 'Strata Sync',inject:()=>({rpc,localeStore}),
       },SettingsPage)), 'strata-sync: settings page');
     }
-    return {inject:['slots','connection'],apply};
+    return {inject:['slots','connection','locale'],apply};
   },
 });

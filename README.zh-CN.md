@@ -2,13 +2,13 @@
 
 [English](README.md) · **简体中文** · [繁體中文](README.zh-TW.md)
 
-让 **DeepSeek Harness（DSH）** 对齐 **Strata Server** 实际加载的模型，并在 DSH **设置 → Strata Sync** 中提供操作界面。这是社区插件，非 DeepSeek 或 Strata 官方产品。
+让 **DeepSeek Harness（DSH）** 对齐 **Strata Server** 实际加载的模型，并在 DSH **设置 → Strata Sync** 中提供操作界面。
 
-UI 支持 English、简体中文、繁體中文。在插件页面上方的“语言”菜单切换；默认英文，选择保存在当前浏览器的本地存储中，不修改 DSH 全局语言或模型设置。服务器返回的未知诊断消息保留原文，方便排查。
+UI 支持 English、简体中文、繁體中文。自动跟随 DSH 界面语言并实时更新，不提供独立语言菜单。DSH 的 `zh` 对应简体中文，`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO` 对应繁体中文；其他语言使用英文。服务器返回的未知诊断消息保留原文，方便排查。
 
-![简体中文设置界面](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-zh-CN.jpg?v=0.4.0)
+0.5.0 改为跟随 DSH 语言与启动时单次同步，保留差异表的数值对齐、能力标签、可展开的参数映射，以及窄窗口逐项比较。
 
-0.4.1 改善差异表：数值对齐、能力标签、可展开的参数映射，以及窄窗口逐项比较。
+![原生 DSH 设置界面（英文）](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview-050.png)
 
 ## 功能
 
@@ -29,7 +29,7 @@ UI 支持 English、简体中文、繁體中文。在插件页面上方的“语
 - 读取 `/v1/models` 和可用的 `/slots`，确认模型 ID 和引擎实际上下文，不从模型名称猜测。
 - 更新选定 DSH 模型的上下文、输出上限，以及已启用 Agent 预设中的原生 `compaction-basic` 策略；预览会列出受影响的预设。
 - 区分服务器报告值与插件计算的客户端预算，可自定义输出上限、选择让默认模型跟随服务器。
-- 自动同步默认关闭；启用后每 60 秒检查，仅在所有 DSH 任务空闲时应用。
+- 自动同步默认关闭；在启动前启用后，每次 DSH 宿主进程启动、所有任务空闲时同步一次，不再定期查询服务器。运行期间启用会在下次启动生效；立即同步请点击“备份并同步”。失败时显示错误，请手动重试或下次启动再试。
 - 应用前重新确认服务器、拒绝过期预览、备份设置；后续写入失败时回滚已完成的更改。
 - 沿用 DSH 现有认证，不在页面或诊断中显示密钥，不跟随 HTTP 重定向。
 
@@ -45,17 +45,17 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.4.1.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.5.0.tgz
 ```
 
 执行最后一行前，先完成任务并完全退出 DSH Desktop，再使用官方 CLI 安装，完成后重新打开。在其他目录执行时，请使用安装包的绝对路径。首次安装会自动选中 bundle；已安装但禁用的 bundle 需在插件管理器重新启用。
 
 先在 DSH 模型设置建立 Strata 提供方，再打开 **设置 → Strata Sync**：
 
-1. 选择语言与已有 Strata 提供方，点击“保存偏好”。
+1. 选择已有 Strata 提供方，点击“保存偏好”。
 2. 点击“检查差异”，预览当前加载模型与建议设置。
 3. DSH 空闲时点击“备份并同步”。
-4. 如需自动同步，勾选“空闲时自动同步”并保存。
+4. 如需自动同步，勾选“启动 DSH 时自动同步”并保存，下次启动生效。原有 `autoSync: true` 会沿用为启动同步。
 5. 开启新对话，使用更新后的 Agent 预设。
 
 无需把 API key 复制到此插件；认证问题请在 DSH 模型设置处理。
@@ -66,7 +66,7 @@ dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.4.1.tgz
 
 无法确认上下文、未加载模型、多个模型无法判定、slot 容量相互冲突时，会拒绝同步。目前 UI 跟随单个已加载模型，不提供多个同时加载模型的选择器。
 
-轮询调度包含 DSH 0.2.1-rc.3 的 HMR `executing.exit` 兼容处理，避免计时器保留已完成的设置事务；所有写入仍通过 ConfigEditor 的正常队列。升级 DSH 后需重新验证此兼容处理。
+启动等待调度包含 DSH 0.2.1-rc.3 的 HMR `executing.exit` 兼容处理，避免计时器保留已完成的设置事务；所有写入仍通过 ConfigEditor 的正常队列。升级 DSH 后需重新验证此兼容处理。
 
 ## 预算策略
 
@@ -95,11 +95,11 @@ retainRatio = 0.16
 
 每次应用前，将当前 `cordis.patch.yml` 备份至 profile 旁的 `backups/strata-sync/`，UI 会显示路径。备份可能包含私人提供方设置，请保留在本机，不要公开。
 
-ConfigEditor 负责单项原子写入与热加载；跨多项设置采用补偿回滚，并非数据库事务。如果同时有外部修改，可能需要依据备份手动恢复。关闭自动同步可停止后续轮询应用；移除插件**不会撤销已应用的模型与预算**。需要还原时，请先关闭 DSH 再恢复指定备份。
+ConfigEditor 负责单项原子写入与热加载；跨多项设置采用补偿回滚，并非数据库事务。如果同时有外部修改，可能需要依据备份手动恢复。关闭自动同步可取消尚未执行的启动同步，并禁用后续启动同步；移除插件**不会撤销已应用的模型与预算**。需要还原时，请先关闭 DSH 再恢复指定备份。
 
 ## 开发与版本
 
-0.3.0 新增三语 UI、语言选择记忆与中文 README；0.2.0 将 UI 移入原生设置。同步策略保持不变。
+0.5.0 移除独立语言菜单与产品声明，改为跟随 DSH 语言及启动时单次同步。0.3.0 首次加入三语 UI，0.2.0 将 UI 移入原生设置。
 
 `src/plugin.mjs` 为宿主插件，`src/client.js` 为原生 ModuleLoader/React UI，`src/core.mjs` 负责信息读取与纯预算计算。执行 `npm test`、`npm run build`、`npm pack --dry-run` 验证。安装包只包含原创插件代码，不包含私人应用程序源码、认证或对话。
 

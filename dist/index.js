@@ -16,6 +16,9 @@ const PACKAGE = '@ethan741205/dsh-strata-sync';
 const COMPACTION = '@deepseek-ai/dsh-compaction-basic';
 const PRESET = '@deepseek-ai/dsh-agent-preset';
 const CHANNEL = '/api/strata-sync';
+// Survives plugin hot reloads, but not a new DSH host process. One attempt per profile.
+const startupKey = Symbol.for('@ethan741205/dsh-strata-sync/startup');
+const startupProfiles = globalThis[startupKey] ??= new Map();
 const clone = (value) => structuredClone(value);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
@@ -406,8 +409,17 @@ export function apply(ctx, initialConfig) {
     if (writeBarrier) await writeBarrier;
     return next();
   }, { prepend: true });
+  const profile = ctx.configEditor.documentPath;
+  if (!startupProfiles.has(profile)) startupProfiles.set(profile, { pending: !!settings.autoSync });
+  const startup = startupProfiles.get(profile);
+  let timer;
   const poll = async () => {
-    if (closed || !settings.autoSync || busy() || inFlight) return;
+    if (closed || !startup.pending) return;
+    if (!settings.autoSync) { startup.pending = false; clearInterval(timer); return; }
+    if (busy() || inFlight) return;
+    // Consume before any await: HMR, errors and UI navigation must not run it again.
+    startup.pending = false;
+    clearInterval(timer);
     try {
       await run(async () => {
         const view = await preview();
@@ -420,9 +432,10 @@ export function apply(ctx, initialConfig) {
   // edits are rejected as nested HMR transactions. Mirror Hmr.watchConfig():
   // detach only timer creation, while every write still uses ConfigEditor and
   // its normal runExclusive queue. `executing` is a version-specific host seam.
-  const createTimer = () => setInterval(() => { void poll(); }, 60_000);
+  // This timer only waits for startup readiness/idle; no recurring server polling.
+  const createTimer = () => setInterval(() => { void poll(); }, 1_000);
   const executing = ctx.get('hmr')?.executing;
-  const timer = typeof executing?.exit === 'function' ? executing.exit(createTimer) : createTimer();
-  timer.unref?.();
-  ctx.effect(() => () => { closed = true; clearInterval(timer); releaseWrite?.(); }, 'strata-sync: polling lifetime');
+  if (startup.pending) timer = typeof executing?.exit === 'function' ? executing.exit(createTimer) : createTimer();
+  timer?.unref?.();
+  ctx.effect(() => () => { closed = true; clearInterval(timer); releaseWrite?.(); }, 'strata-sync: startup lifetime');
 }

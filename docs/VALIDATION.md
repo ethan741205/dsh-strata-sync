@@ -2,6 +2,14 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## DSH language and startup synchronization 0.5.0
+
+- All 58 tests pass. Regression coverage includes DSH locale subscriptions and cleanup, ignoring obsolete browser language preferences, Chinese regional variants, idle deferral, one attempt per process/profile, no repeat reads after completion/failure, HMR deduplication and manual retry availability.
+- Installed the packed 0.5.0 bundle only in the existing isolated DSH Desktop 0.2.1-rc.3 web profile. Native English and Chinese UI switches automatically update the plugin. The language selector and product disclaimer are absent. The stock host exposes en/zh; Traditional Chinese regional mapping is covered by automated tests.
+- Enabled startup sync in the UI. Saving the preference left the model at 32,768/9,830. Restarted only the isolated host; it synchronized the fixture model to 65,536/16,384 and displayed its successful sync timestamp and backup path. No Apply action or inference was used.
+- The English screenshot is a fresh native-host capture. Older screenshots are not linked from the current READMEs.
+- Production DSH and Strata configuration were not changed. Language integration uses DSH's locale service (getLocale/subscribe), described in [upstream client locale source](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/locale/src/client/index.ts).
+
 ## Difference-table layout 0.4.1
 
 All 56 existing tests passed after the UI renderer change. In the isolated native host, a 32K-to-64K preview rendered a 528px table without horizontal overflow, with approximately 180/174/174px columns and right-aligned current/after values. English, Traditional Chinese and Simplified Chinese headers and values were checked in the live DOM. This version also renders capability arrays as chips, nested mappings as expandable details, and stacks rows when the table container is narrower than 440px. The narrow layout has not received a separate visual check. Browser screenshot capture timed out, so existing 0.4.0 screenshots are retained rather than presented as new captures. No synchronization was applied in this layout check.

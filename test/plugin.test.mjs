@@ -104,8 +104,9 @@ async function harness(options = {}) {
     return (await response.json()).result;
   };
   const dispose = () => { for (const cleanup of effects.splice(0)) cleanup?.(); };
-  return { call, raw, entries, ctx, dispose, get requests() { return requests; }, get writes() { return writes; }, setRunning: value => { running = value; },
-    poll: async () => { poll(); for (let i = 0; i < 25; i++) { await new Promise(resolve => setTimeout(resolve, 5)); } },
+  return { call, raw, entries, ctx, dispose, get requests() { return requests; }, get writes() { return writes; },
+    reload: () => { dispose(); poll=undefined; apply(ctx, entries[3].options.config); }, setRunning: value => { running = value; },
+    poll: async () => { poll?.(); for (let i = 0; i < 25; i++) { await new Promise(resolve => setTimeout(resolve, 5)); } },
     backupCount: async () => { try { return (await readdir(join(dir, 'backups', 'strata-sync'))).length; } catch { return 0; } },
     close: async () => { dispose(); globalThis.setInterval = realInterval; globalThis.clearInterval = realClear; globalThis.fetch = realFetch; await rm(dir, { recursive: true, force: true }); },
   };
@@ -234,16 +235,16 @@ test('a failed second config write rolls the first config back', async () => {
   } finally { await h.close(); }
 });
 
-test('automatic polling only applies once, and skips running tasks', async () => {
+test('startup sync waits for idle and performs no further server reads', async () => {
   const h = await harness({ autoSync: true }); try {
     h.setRunning(true); await h.poll(); assert.equal(h.requests, 0);
     h.setRunning(false); await h.poll(); assert.equal(await h.backupCount(), 1);
-    const writes = h.writes;
-    await h.poll(); assert.equal(await h.backupCount(), 1); assert.equal(h.writes, writes);
+    const writes = h.writes, requests = h.requests;
+    await h.poll(); assert.equal(await h.backupCount(), 1); assert.equal(h.writes, writes); assert.equal(h.requests,requests);
   } finally { await h.close(); }
 });
 
-test('disposal during delayed polling discovery prevents any backup or settings write', async () => {
+test('disposal during delayed startup discovery prevents any backup or settings write', async () => {
   let release;
   const wait = new Promise(resolve => { release = resolve; });
   const h = await harness({ autoSync: true, beforeFetch: async url => { if (url.endsWith('/models')) await wait; } });
@@ -339,4 +340,24 @@ test('a timer created during HMR reload exits the inherited transaction before l
     await h.poll();
     assert.equal(h.writes, writes); assert.equal(await h.backupCount(), 1);
   } finally { await h.close(); hmrStore.disable(); }
+});
+
+test('startup is not repeated by HMR or by enabling the option later in the same process', async () => {
+  for (const enabled of [true,false]) {
+    const h=await harness({autoSync:enabled}); try {
+      await h.poll(); const requests=h.requests;
+      h.entries[3].options.config.autoSync=true;
+      h.reload(); await h.poll();
+      assert.equal(h.requests,requests);
+      assert.equal(requests>0,enabled);
+    } finally { await h.close(); }
+  }
+});
+test('failed startup reports its error without periodic retries; manual preview remains available', async () => {
+  const h=await harness({autoSync:true,serverStatus:503}); try {
+    await h.poll(); const requests=h.requests;
+    assert.ok((await h.call('status')).value.lastError);
+    await h.poll(); h.reload(); await h.poll(); assert.equal(h.requests,requests);
+    await h.call('preview'); assert.ok(h.requests>requests);
+  } finally { await h.close(); }
 });

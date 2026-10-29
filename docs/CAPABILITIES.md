@@ -1,6 +1,6 @@
 # Verified model capabilities
 
-Version 0.4.0 adds capability synchronization to the existing preview, backup, rollback and idle-polling workflow. It does not send generation requests or alter Strata Server.
+Version 0.4.0 adds capability synchronization to the existing preview, backup, rollback and idle-only synchronization workflow. It does not send generation requests or alter Strata Server.
 
 ## Input types
 

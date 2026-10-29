@@ -2,13 +2,13 @@
 
 **English** · [简体中文](README.zh-CN.md) · [繁體中文](README.zh-TW.md)
 
-A community plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded by **Strata Server**, using a native DSH settings UI. This is not an official DeepSeek or Strata product.
+A plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded by **Strata Server**, using a native DSH settings UI.
 
-Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization while DSH is idle. The interface and README are available in English, Simplified Chinese and Traditional Chinese. Choose a language at the top of the plugin page. English is the default; the selection is stored in the current browser only and does not change DSH’s global language or model settings. Unknown backend diagnostics retain their original text for troubleshooting.
+Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts. The interface and README are available in English, Simplified Chinese and Traditional Chinese. The interface automatically follows DSH’s language, including live changes. DSH `zh` uses Simplified Chinese; `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` use Traditional Chinese. Other languages fall back to English. There is no separate language preference. Unknown backend diagnostics retain their original text for troubleshooting.
 
-![Native DSH Strata Sync settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview.jpg?v=0.4.0)
+Version 0.5.0 follows DSH’s language and replaces periodic auto-sync with one startup attempt. The difference table uses aligned values, capability chips, expandable parameter mappings and a stacked layout in narrow panels.
 
-Version 0.4.1 improves the difference table with aligned values, capability chips, expandable parameter mappings and a stacked layout in narrow panels.
+![Native DSH settings](https://raw.githubusercontent.com/ethan741205/dsh-strata-sync/main/docs/ui-preview-050.png)
 
 ## What it does
 
@@ -30,7 +30,7 @@ See [capability evidence and exact mappings](docs/CAPABILITIES.md). No additiona
 - Updates that DSH model's context and output limit, and its native `compaction-basic` policy inside enabled Agent presets. The preview identifies the affected presets.
 - Shows server-reported values separately from client-derived budgets.
 - Offers an output-budget override and optional default-model following.
-- Checks every 60 seconds when auto-sync is enabled. Applies only when all DSH agents are idle. No generation requests, model loading or server changes.
+- When enabled before startup, synchronizes once per DSH host process/profile after tasks become idle. No periodic server checks. Enabling it during a session takes effect on the next start; use **Back up and sync** for an immediate sync. A failed attempt is shown in the UI and requires manual retry or the next start. No generation requests, model loading or server changes.
 - Previews differences, rechecks the server before applying, rejects stale previews, backs up the profile and rolls back completed edits if a later edit fails.
 - Uses DSH's existing credential service. Keys never appear in the page or diagnostics; redirects are not followed.
 
@@ -42,7 +42,7 @@ Developed against **DSH desktop 0.2.1-rc.3** and Strata's OpenAI-compatible mode
 
 Unknown context, no loaded model, ambiguous multiple loaded models, or conflicting slot capacities are refused. This version's UI follows the single loaded model; it does not select among multiple simultaneously loaded models.
 
-The polling scheduler includes a narrow DSH 0.2.1-rc.3 compatibility adapter for HMR's `executing.exit` context, following the host's own watcher pattern. This prevents timers created during a settings reload from retaining the completed HMR transaction. All writes still go through ConfigEditor and its normal transaction queue. Revalidate this adapter after upgrading DSH.
+The startup idle-wait scheduler includes a narrow DSH 0.2.1-rc.3 compatibility adapter for HMR's `executing.exit` context, following the host's own watcher pattern. This prevents timers created during a settings reload from retaining the completed HMR transaction. All writes still go through ConfigEditor and its normal transaction queue. Revalidate this adapter after upgrading DSH.
 
 ## Install
 
@@ -54,7 +54,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.4.1.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.5.0.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
@@ -66,10 +66,16 @@ Then open **Settings → Strata Sync**:
 1. Choose the existing Strata provider and save preferences.
 2. Click **Check differences** to read the loaded model and preview the proposed settings.
 3. Click **Back up and sync** while DSH is idle.
-4. Optionally enable **Automatically sync while idle** and save. Auto-sync defaults to off.
+4. Optionally enable **Automatically sync when DSH starts** and save. It defaults to off and takes effect on the next start. Existing `autoSync: true` preferences now use startup behavior.
 5. Start a new conversation to use the new Agent preset revision.
 
 No API key needs to be copied into this plugin. Set up or repair credentials in DSH Models settings.
+
+## Changes in 0.5.0
+
+- Follows DSH’s native locale service; removes the independent language selector and product disclaimer.
+- Performs one optional startup sync per host process/profile, waiting for idle. Hot reloads and reopening Settings do not repeat it.
+- Preserves the existing opt-in `autoSync` preference; no recurring server polling.
 
 ## Changes in 0.3.0
 
@@ -110,7 +116,7 @@ This fixes invalid small-window compaction budgets such as the native `headroomT
 
 Every applied settings operation saves the current `cordis.patch.yml` beside the profile under `backups/strata-sync/`. Backups can contain private provider configuration; keep them local. The UI reports the backup path after application. DSH's own config editor handles individual atomic writes and hot reload. Multi-entry updates use compensating rollback, not a database transaction; a concurrent external edit can require manual recovery from the recorded backup.
 
-Disabling auto-sync stops future polling-driven changes. Removing the plugin does **not** undo model/budget settings previously applied. Restore the desired backup with DSH stopped if you want to undo them.
+Disabling auto-sync cancels a pending startup sync and disables it for future starts. Removing the plugin does **not** undo model/budget settings previously applied. Restore the desired backup with DSH stopped if you want to undo them.
 
 ## Development
 
@@ -123,7 +129,7 @@ npm run build
 npm pack --dry-run
 ```
 
-Automated tests cover metadata validation, credentials/redirect safety, budgets, busy-state guards, stale previews, preservation of unrelated settings, rollback, automatic polling, HMR context, preset activation and UI behavior. Tests use simulated endpoints and DSH services; they do not generate model responses. See [validation notes](docs/VALIDATION.md) for the verified version and the isolated native-host checks.
+Automated tests cover metadata validation, credentials/redirect safety, budgets, busy-state guards, stale previews, preservation of unrelated settings, rollback, one-shot startup sync, HMR deduplication, preset activation and UI behavior. Tests use simulated endpoints and DSH services; they do not generate model responses. See [validation notes](docs/VALIDATION.md) for the verified version and the isolated native-host checks.
 
 References: [DSH compaction documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md), [Strata](https://github.com/Niko1221/Strata).
 
