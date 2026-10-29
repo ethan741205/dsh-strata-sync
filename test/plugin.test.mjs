@@ -73,6 +73,7 @@ async function harness(options = {}) {
         if (options.hmrStore?.getStore()) throw Error('HMR transactions cannot be nested');
         if (!entries.includes(entry) || !entry.fiber) throw Error('Configuration entry is no longer available');
         if (entry.fiber.state !== 2) throw Error('Configuration plugin is no longer active');
+        await options.beforeEdit?.(entry);
         const next = change(structuredClone(entry.options.config));
         if (options.rejectCompaction && entry.options.name === COMPACT) throw Error('injected write failure');
         entry.options.config = structuredClone(next);
@@ -379,4 +380,183 @@ test('server output default updates model and compaction policy; changed default
 test('unsafe server output fails before backup or settings writes',async()=>{
  const h=await harness({props:()=>({build_info:'Strata 0.1.52',model_alias:'qwen',default_generation_settings:{params:{n_predict:32000}}})});
  try{const r=await h.call('preview');assert.equal(r.error.code,'INVALID_OUTPUT_BUDGET');assert.equal(h.writes,0);assert.equal(await h.backupCount(),0);}finally{await h.close();}
+});
+
+test('settings changed during apply discovery invalidate the preview instead of becoming the new baseline', async () => {
+  let mutate = false, h;
+  h = await harness({ beforeFetch: async url => {
+    if (mutate && url.endsWith('/models')) h.entries[0].options.config.providers['strata-server'].models[0].maxTokens = 7777;
+  } });
+  try {
+    const first = (await h.call('preview')).value;
+    mutate = true;
+    const result = await h.call('apply', { fingerprint: first.fingerprint });
+    assert.equal(result.error.code, 'stale-preview');
+    assert.equal(h.entries[0].options.config.providers['strata-server'].models[0].maxTokens, 7777);
+    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
+  } finally { await h.close(); }
+});
+
+test('a compaction change during initial discovery prevents returning an actionable stale preview', async () => {
+  let h;
+  h = await harness({ beforeFetch: async url => {
+    if (url.endsWith('/models')) h.entries[1].options.config.maxTokens = 7777;
+  } });
+  try {
+    const result = await h.call('preview');
+    assert.equal(result.error.code, 'stale-preview');
+    assert.equal(h.entries[1].options.config.maxTokens, 7777);
+    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
+  } finally { await h.close(); }
+});
+
+test('all owner snapshots are rechecked when the first queued write starts', async () => {
+  let h;
+  h = await harness({ beforeEdit: async () => { h.entries[1].options.config.maxTokens = 7777; } });
+  try {
+    const first = (await h.call('preview')).value;
+    const originalModel = structuredClone(h.entries[0].options.config);
+    const result = await h.call('apply', { fingerprint: first.fingerprint });
+    assert.equal(result.error.code, 'stale-preview');
+    assert.deepEqual(h.entries[0].options.config, originalModel);
+    assert.equal(h.entries[1].options.config.maxTokens, 7777);
+    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 1);
+  } finally { await h.close(); }
+});
+
+test('a task starting before the queued write defers without changing configuration', async () => {
+  let h;
+  h = await harness({ beforeEdit: async () => { h.setRunning(true); } });
+  try {
+    const first = (await h.call('preview')).value;
+    const result = await h.call('apply', { fingerprint: first.fingerprint });
+    assert.equal(result.error.code, 'busy'); assert.equal(h.writes, 0);
+  } finally { await h.close(); }
+});
+
+test('startup discovery interrupted by a new task completes once after returning to idle', async () => {
+  let h, first = true;
+  h = await harness({ autoSync: true, beforeFetch: async url => {
+    if (first && url.endsWith('/models')) { first = false; h.setRunning(true); }
+  } });
+  try {
+    await h.poll();
+    assert.equal((await h.call('status')).value.lastError.code, 'busy');
+    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
+    const busyRequests = h.requests;
+    await h.poll(); assert.equal(h.requests, busyRequests);
+    h.setRunning(false); await h.poll();
+    assert.equal((await h.call('status')).value.lastError, null);
+    assert.equal(await h.backupCount(), 1);
+    assert.equal(h.entries[0].options.config.providers['strata-server'].models[0].contextWindow, 32768);
+    const requests = h.requests, writes = h.writes;
+    await h.poll(); h.reload(); await h.poll();
+    assert.equal(h.requests, requests); assert.equal(h.writes, writes);
+  } finally { await h.close(); }
+});
+
+test('startup readiness errors are reported without unhandled timer rejection or recurring requests', async () => {
+  const h = await harness({ autoSync: true });
+  try {
+    h.entries[3].fiber.state = 0;
+    await h.poll();
+    h.entries[3].fiber.state = 2;
+    assert.equal((await h.call('status')).value.lastError.code, 'unsupported-profile');
+    await h.poll();
+    assert.equal(h.requests, 0); assert.equal(h.writes, 0);
+  } finally { await h.close(); }
+});
+
+test('configure requires a current revision and stale clients cannot clear a newer override', async () => {
+  const h = await harness();
+  try {
+    const initial = (await h.call('status')).value;
+    assert.match(initial.settingsRevision, /^[a-f0-9]{64}$/);
+    const missing = await h.call('configure', { outputTokens: 8192 });
+    assert.equal(missing.error.code, 'stale-settings'); assert.equal(await h.backupCount(), 0);
+    const saved = await h.call('configure', { expectedRevision: initial.settingsRevision, outputTokens: 8192 });
+    assert.equal(saved.ok, true);
+    assert.notEqual(saved.value.settingsRevision, initial.settingsRevision);
+    assert.equal(saved.value.outputTokens, 8192);
+    const stale = await h.call('configure', { expectedRevision: initial.settingsRevision, outputTokens: null });
+    assert.equal(stale.error.code, 'stale-settings');
+    assert.equal(h.entries[3].options.config.outputTokens, 8192);
+    assert.equal(h.writes, 1); assert.equal(await h.backupCount(), 1);
+    const patched = await h.call('configure', { expectedRevision: saved.value.settingsRevision, autoSync: true });
+    assert.equal(patched.ok, true);
+    assert.equal(patched.value.outputTokens, 8192);
+    assert.equal(patched.value.followLoadedModel, true);
+    assert.equal(patched.value.providerId, 'strata-server');
+    assert.equal(patched.value.autoSync, true);
+  } finally { await h.close(); }
+});
+
+test('status observes externally updated preferences and queued saves use a compare-and-swap check', async () => {
+  let h;
+  h = await harness({ beforeEdit: async entry => {
+    if (entry.options.name === PKG) entry.options.config.outputTokens = 7777;
+  } });
+  try {
+    const initial = (await h.call('status')).value;
+    h.entries[3].options.config.outputTokens = 8192;
+    const latest = (await h.call('status')).value;
+    assert.notEqual(latest.settingsRevision, initial.settingsRevision);
+    assert.equal(latest.outputTokens, 8192);
+    const saved = await h.call('configure', { expectedRevision: latest.settingsRevision, outputTokens: null });
+    assert.equal(saved.error.code, 'stale-settings');
+    assert.equal(h.entries[3].options.config.outputTokens, 7777); assert.equal(h.writes, 0);
+  } finally { await h.close(); }
+});
+
+test('catalog-backed routes and modelOverrides are rejected during preview before network or writes', async () => {
+  const cases = [route => { delete route.models; }, route => { route.models = []; },
+    route => { route.modelOverrides = { qwen: { maxTokens: 8192 } }; }];
+  for (const mutate of cases) {
+    const h = await harness();
+    try {
+      mutate(h.entries[0].options.config.providers['strata-server']);
+      const original = structuredClone(h.entries[0].options.config);
+      const result = await h.call('preview');
+      assert.equal(result.error.code, 'unsupported-route');
+      assert.match(result.error.message, /explicit models list/);
+      assert.deepEqual(h.entries[0].options.config, original);
+      assert.equal(h.requests, 0); assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
+    } finally { await h.close(); }
+  }
+});
+
+test('an explicit custom route can add the newly loaded model without replacing other entries', async () => {
+  const h = await harness();
+  try {
+    h.entries[0].options.config.providers['strata-server'].models = [{ id: 'older-model', maxTokens: 8192 }];
+    const first = (await h.call('preview')).value;
+    const result = await h.call('apply', { fingerprint: first.fingerprint });
+    assert.equal(result.ok, true);
+    const models = h.entries[0].options.config.providers['strata-server'].models;
+    assert.deepEqual(models[0], { id: 'older-model', maxTokens: 8192 });
+    assert.equal(models[1].id, 'qwen'); assert.equal(models[1].contextWindow, 32768);
+  } finally { await h.close(); }
+});
+
+test('the successful result retains safe budget provenance and preserved capability status', async () => {
+  const h = await harness({ modalities: ['text'], props: () => ({ build_info: 'Strata 0.1.52', model_alias: 'qwen', default_generation_settings: { params: { n_predict: 8192 } } }) });
+  try {
+    const first = (await h.call('preview')).value;
+    assert.deepEqual(first.capabilityStatus, { input: 'confirmed', reasoning: 'preserved' });
+    const result = await h.call('apply', { fingerprint: first.fingerprint });
+    assert.equal(result.ok, true);
+    const summary = (await h.call('status')).value.lastApplied;
+    assert.equal(summary.modelId, 'qwen'); assert.equal(summary.budget.contextWindow, 32768);
+    assert.equal(summary.budget.outputTokens, 8192); assert.equal(summary.budget.outputSource, 'server');
+    assert.equal(summary.serverOutputTokens, 8192); assert.equal(summary.outputLimitStatus, 'server');
+    assert.deepEqual(summary.capabilityStatus, first.capabilityStatus);
+    assert.ok(summary.warnings.includes('REASONING_UNCONFIRMED'));
+    assert.equal(summary.backupPath, result.value.backupPath);
+    assert.equal(summary.applied, true);
+    assert.ok(!JSON.stringify(summary).includes('do-not-expose-test-secret'));
+    const aligned = (await h.call('preview')).value;
+    assert.equal((await h.call('apply', { fingerprint: aligned.fingerprint })).value.applied, false);
+    assert.equal((await h.call('status')).value.lastApplied.applied, false);
+    assert.equal(await h.backupCount(), 1);
+  } finally { await h.close(); }
 });

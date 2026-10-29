@@ -2,6 +2,18 @@
 
 Validation date: 2026-10-30 (Asia/Taipei).
 
+## Synchronization and settings safeguards 0.7.0
+
+- All **94 tests pass**, including 29 new regression tests. Coverage now includes changes during discovery and queued writes, revision-checked preference patches, multi-window conflicts, busy-to-idle startup deferral, startup readiness errors, alias resolution, non-text generators, unsupported catalog routes, delayed status responses and retained sync results.
+- Explicitly verified the originally reported races: changing model settings during an apply query now rejects the stale preview without overwriting the newer value; a task beginning during startup discovery leaves synchronization pending until idle.
+- The UI follows untouched preferences from other windows, reports conflicts for locally edited preferences, sends only changed fields with their baseline revision, and ignores older delayed status responses. Latest synchronization results from other windows replace older local results.
+- All three locales cover automatic/manual output controls, provenance, partial capability alignment and result summaries. No independent language selector was added.
+- Packed 0.7.0 and installed it through the official DSH plugin installer into the existing isolated DSH Desktop 0.2.1-rc.3 web profile. Startup synchronization, native preference saving/hot reload, manual 8,192-token output preview/application and result-card retention succeeded.
+- Returned the isolated profile to automatic output mode. With a fixture server default of 4,096 and context 32,768, preview and apply used 4,096 output tokens and a 24,576-token (75%) compaction threshold. The UI distinguished the server default, effective value and source, and reported a backup.
+- Native English and Simplified Chinese settings were checked through the browser. The installed host offers en/zh; Traditional Chinese is covered by automated locale/rendering tests. Reviewed the native result-card layout visually.
+- Catalog-only routes and nonempty modelOverrides are rejected during preview; support for editing catalog overrides is not claimed. Existing explicit custom model lists remain supported, including adding the newly loaded canonical model.
+- The fixture accepts metadata requests only. Production DSH, OpenCode and Strata server settings were not modified, and no inference requests were sent.
+
 ## Server output defaults 0.6.0
 
 - All 65 tests pass. New coverage includes fixed server caps, absent/null and unlimited (-1/0) defaults, unavailable props, wrong model/Strata identity, invalid types, insufficient compaction space, manual precedence, stale-preview rejection after server-cap changes, applied model limits and translated output provenance.

@@ -6,7 +6,7 @@ A plugin that aligns **DeepSeek Harness (DSH)** with the model actually loaded b
 
 Open **Settings → Strata Sync** to inspect differences, synchronize an existing Strata provider, or enable automatic synchronization when DSH starts. The interface and README are available in English, Simplified Chinese and Traditional Chinese. The interface automatically follows DSH’s language, including live changes. DSH `zh` uses Simplified Chinese; `zh-Hant`, `zh-TW`, `zh-HK` and `zh-MO` use Traditional Chinese. Other languages fall back to English. There is no separate language preference. Unknown backend diagnostics retain their original text for troubleshooting.
 
-Version 0.6.0 prefers the Strata Server output default and displays its source. Version 0.5.0 follows DSH’s language and replaces periodic auto-sync with one startup attempt. The difference table uses aligned values, capability chips, expandable parameter mappings and a stacked layout in narrow panels.
+Version 0.7.0 protects concurrent edits, completes startup sync after an intervening task, and correctly distinguishes model aliases and image-generation endpoints. The settings page makes **Follow Strata** explicit, moves manual output overrides into **Advanced settings**, and retains the last sync result. Unknown capabilities are clearly listed as preserved rather than fully verified.
 
 ## What it does
 
@@ -24,12 +24,13 @@ See [capability evidence and exact mappings](docs/CAPABILITIES.md). No additiona
 
 ### Existing synchronization features
 
-- Reads `/v1/models` and, when available, `/slots`. Uses the loaded model ID and actual engine context; it never guesses context from a model name.
+- Reads `/v1/models` and, when available, `/slots`. Uses the loaded canonical text-model ID and actual engine context; it never guesses context from a model name. Verified aliases refer to the same model; image-generation endpoints are excluded.
 - Updates that DSH model's context and output limit, and its native `compaction-basic` policy inside enabled Agent presets. The preview identifies the affected presets.
 - Shows server-reported values separately from client-derived budgets.
-- Offers an output-budget override and optional default-model following.
-- When enabled before startup, synchronizes once per DSH host process/profile after tasks become idle. No periodic server checks. Enabling it during a session takes effect on the next start; use **Back up and sync** for an immediate sync. A failed attempt is shown in the UI and requires manual retry or the next start. No generation requests, model loading or server changes.
-- Previews differences, rechecks the server before applying, rejects stale previews, backs up the profile and rolls back completed edits if a later edit fails.
+- Uses **Follow Strata** for output selection by default. **Advanced settings** provides an explicit manual override. Server-reported output defaults, effective output values and their sources are shown separately. Default-model following remains optional.
+- When enabled before startup, synchronizes once per DSH host process/profile after tasks become idle. If a task starts during discovery, the pending sync waits and resumes after it finishes. There are no recurring checks after completion; other failures are shown in the UI and require manual retry or the next start. Enabling it during a session takes effect on the next start; use **Back up and sync** for an immediate sync. No generation requests, model loading or server changes.
+- Previews differences, rechecks the server and the same configuration revision before applying, rejects stale previews, backs up the profile and rolls back completed edits if a later edit fails. Preferences also use revision checks: untouched forms follow fresh values; locally edited forms report conflicts instead of silently overwriting another window.
+- Keeps a read-only last-sync result with model, budgets, output source and backup information. Reports verified and preserved capabilities separately.
 - Uses DSH's existing credential service. Keys never appear in the page or diagnostics; redirects are not followed.
 
 **Start a new conversation after syncing.** Existing conversations keep their selected model route and Agent preset revision. Default-model following and updated preset policies apply to new work; this plugin does not rewrite existing conversations or restart DSH.
@@ -38,7 +39,9 @@ See [capability evidence and exact mappings](docs/CAPABILITIES.md). No additiona
 
 Developed against **DSH desktop 0.2.1-rc.3** and Strata's OpenAI-compatible model/slot metadata. Requires the standard desktop services `configEditor`, `connection`, `agents`, `credentials`, `llm-pi-ai`, and enabled Agent presets containing `compaction-basic` (or an active legacy global compaction plugin). Only API-key or unauthenticated `openai-completions` providers are supported. Configure the provider in DSH Models first.
 
-Unknown context, no loaded model, ambiguous multiple loaded models, or conflicting slot capacities are refused. This version's UI follows the single loaded model; it does not select among multiple simultaneously loaded models.
+Configure an explicit, nonempty custom `models` list for the Strata provider. Catalog-only routes and nonempty `modelOverrides` routes are rejected during preview, before any backup or write; the plugin does not convert catalog providers or combine incompatible model configuration formats.
+
+Unknown context, no loaded text model, ambiguous multiple loaded text models, or conflicting slot capacities are refused. Aliases are resolved to their loaded canonical model, and explicit non-text output endpoints are excluded. Invalid alias chains are refused. This version's UI follows one loaded text model; it does not select among multiple simultaneously loaded text models.
 
 The startup idle-wait scheduler includes a narrow DSH 0.2.1-rc.3 compatibility adapter for HMR's `executing.exit` context, following the host's own watcher pattern. This prevents timers created during a settings reload from retaining the completed HMR transaction. All writes still go through ConfigEditor and its normal transaction queue. Revalidate this adapter after upgrading DSH.
 
@@ -52,7 +55,7 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.6.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.7.0.tgz
 ```
 
 Use an absolute tarball path if running the last command elsewhere. DSH's plugin installer selects the included bundle; it can require a desktop reload to mount the new browser entry. Finish any active task before restarting DSH.
@@ -61,7 +64,7 @@ For the desktop profile, fully quit DSH Desktop before using the CLI installer, 
 
 Then open **Settings → Strata Sync**:
 
-1. Choose the existing Strata provider and save preferences.
+1. Choose the existing Strata provider and save preferences. Keep **Follow Strata** enabled, or open **Advanced settings** for a manual output override.
 2. Click **Check differences** to read the loaded model and preview the proposed settings.
 3. Click **Back up and sync** while DSH is idle.
 4. Optionally enable **Automatically sync when DSH starts** and save. It defaults to off and takes effect on the next start. Existing `autoSync: true` preferences now use startup behavior.
@@ -132,7 +135,7 @@ npm run build
 npm pack --dry-run
 ```
 
-Automated tests cover metadata validation, credentials/redirect safety, budgets, busy-state guards, stale previews, preservation of unrelated settings, rollback, one-shot startup sync, HMR deduplication, preset activation and UI behavior. Tests use simulated endpoints and DSH services; they do not generate model responses. See [validation notes](docs/VALIDATION.md) for the verified version and the isolated native-host checks.
+All 94 automated tests pass for 0.7.0, including 29 new regression tests for concurrent edits, multi-window preference conflicts, busy-to-idle startup deferral, aliases and non-text generators, catalog compatibility, delayed responses and retained UI results. Existing tests cover credentials/redirect safety, budgets, rollback, HMR deduplication, preset activation and request mappings. Tests use simulated endpoints and DSH services; they do not generate model responses. See [validation notes](docs/VALIDATION.md) for the verified version and the isolated native-host checks.
 
 References: [DSH compaction documentation](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md), [Strata](https://github.com/Niko1221/Strata).
 

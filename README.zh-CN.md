@@ -6,7 +6,7 @@
 
 UI 支持 English、简体中文、繁體中文。自动跟随 DSH 界面语言并实时更新，不提供独立语言菜单。DSH 的 `zh` 对应简体中文，`zh-Hant`、`zh-TW`、`zh-HK`、`zh-MO` 对应繁体中文；其他语言使用英文。服务器返回的未知诊断消息保留原文，方便排查。
 
-0.6.0 优先读取 Strata Server 输出默认值并标示来源；0.5.0 改为跟随 DSH 语言与启动时单次同步，保留差异表的数值对齐、能力标签、可展开的参数映射，以及窄窗口逐项比较。
+0.7.0 加入并发修改保护、修复任务插入时遗漏的启动同步，并正确识别模型别名与图片生成端点。界面明确提供“跟随 Strata”，将手动输出覆盖移入“高级设置”，并保留上次同步结果；无法确认的能力会列为保留原值，不会显示为全部验证完成。
 
 ## 功能
 
@@ -24,11 +24,12 @@ UI 支持 English、简体中文、繁體中文。自动跟随 DSH 界面语言�
 
 ### 已有同步功能
 
-- 读取 `/v1/models` 和可用的 `/slots`，确认模型 ID 和引擎实际上下文，不从模型名称猜测。
+- 读取 `/v1/models` 和可用的 `/slots`，确认文本模型的正式 ID 和引擎实际上下文，不从模型名称猜测。已确认的别名视为同一模型，图片生成端点不计入文本模型选择。
 - 更新选定 DSH 模型的上下文、输出上限，以及已启用 Agent 预设中的原生 `compaction-basic` 策略；预览会列出受影响的预设。
-- 区分服务器报告值与插件计算的客户端预算，可自定义输出上限、选择让默认模型跟随服务器。
-- 自动同步默认关闭；在启动前启用后，每次 DSH 宿主进程启动、所有任务空闲时同步一次，不再定期查询服务器。运行期间启用会在下次启动生效；立即同步请点击“备份并同步”。失败时显示错误，请手动重试或下次启动再试。
-- 应用前重新确认服务器、拒绝过期预览、备份设置；后续写入失败时回滚已完成的更改。
+- 默认使用“跟随 Strata”选择输出上限；手动覆盖放在“高级设置”。分别显示服务器原值、实际采用值与来源，也可选择让默认模型跟随服务器。
+- 自动同步默认关闭；在启动前启用后，每次 DSH 宿主进程启动、所有任务空闲时同步一次。查询途中开始任务时保留待同步状态，任务完成后补做；成功后不再定期查询。其他错误需手动重试或下次启动再试。运行期间启用会在下次启动生效；立即同步请点击“备份并同步”。
+- 应用前重新确认服务器与同一份设置版本、拒绝过期预览、备份设置；后续写入失败时回滚已完成的更改。偏好保存也会核对版本；未编辑的表单跟随最新值，已有编辑时提示冲突，避免覆盖其他窗口的更改。
+- 同步完成后保留只读结果，包含模型、预算、输出来源及备份信息，并区分已确认与保留原值的能力。
 - 沿用 DSH 现有认证，不在页面或诊断中显示密钥，不跟随 HTTP 重定向。
 
 **同步后请开启新对话。** 已有对话保留原模型路由与 Agent 预设版本；插件不改写已有对话、不重启 DSH，也不向模型发送推理请求。
@@ -43,14 +44,14 @@ cd dsh-strata-sync
 npm ci
 npm test
 npm pack
-dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.6.0.tgz
+dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.7.0.tgz
 ```
 
 执行最后一行前，先完成任务并完全退出 DSH Desktop，再使用官方 CLI 安装，完成后重新打开。在其他目录执行时，请使用安装包的绝对路径。首次安装会自动选中 bundle；已安装但禁用的 bundle 需在插件管理器重新启用。
 
 先在 DSH 模型设置建立 Strata 提供方，再打开 **设置 → Strata Sync**：
 
-1. 选择已有 Strata 提供方，点击“保存偏好”。
+1. 选择已有 Strata 提供方，点击“保存偏好”。保留“跟随 Strata”，需要手动覆盖输出上限时再展开“高级设置”。
 2. 点击“检查差异”，预览当前加载模型与建议设置。
 3. DSH 空闲时点击“备份并同步”。
 4. 如需自动同步，勾选“启动 DSH 时自动同步”并保存，下次启动生效。原有 `autoSync: true` 会沿用为启动同步。
@@ -62,7 +63,9 @@ dsh plugin --profile desktop add ./ethan741205-dsh-strata-sync-0.6.0.tgz
 
 基于 **DSH Desktop 0.2.1-rc.3** 开发和验证。需要标准桌面服务 `configEditor`、`connection`、`agents`、`credentials`、`llm-pi-ai`，以及包含 `compaction-basic` 的已启用 Agent 预设，或生效中的旧式全局压缩插件。仅支持 API key 或无认证的 `openai-completions` 提供方。
 
-无法确认上下文、未加载模型、多个模型无法判定、slot 容量相互冲突时，会拒绝同步。目前 UI 跟随单个已加载模型，不提供多个同时加载模型的选择器。
+Strata 提供方必须明确设置非空的自定义 `models` 列表。仅依赖内置模型目录，或包含非空 `modelOverrides` 的路由，会在预览时拒绝，尚未备份或写入；插件不会将目录型提供方转换为自定义列表，或混用不兼容格式。
+
+无法确认上下文、未加载文本模型、多个文本模型无法判定、slot 容量相互冲突时，会拒绝同步。别名会对应到已加载的正式模型，明确输出非文本的端点会排除；无效别名链会拒绝。目前 UI 跟随单个已加载文本模型，不提供多模型选择器。
 
 启动等待调度包含 DSH 0.2.1-rc.3 的 HMR `executing.exit` 兼容处理，避免计时器保留已完成的设置事务；所有写入仍通过 ConfigEditor 的正常队列。升级 DSH 后需重新验证此兼容处理。
 
@@ -106,6 +109,6 @@ ConfigEditor 负责单项原子写入与热加载；跨多项设置采用补偿�
 
 `src/plugin.mjs` 为宿主插件，`src/client.js` 为原生 ModuleLoader/React UI，`src/core.mjs` 负责信息读取与纯预算计算。执行 `npm test`、`npm run build`、`npm pack --dry-run` 验证。安装包只包含原创插件代码，不包含私人应用程序源码、认证或对话。
 
-测试使用模拟服务，不生成模型回答。验证范围与限制见 [VALIDATION](docs/VALIDATION.md)。参考：[DSH 压缩文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md)、[Strata](https://github.com/Niko1221/Strata)。
+0.7.0 的 94 项自动测试全部通过，包含 29 项新增回归测试，覆盖并发修改、多窗口偏好冲突、任务完成后补做启动同步、别名与非文本生成模型、模型目录兼容性、延迟响应及同步结果保留。测试使用模拟服务，不生成模型回答。验证范围与原生宿主测试见 [VALIDATION](docs/VALIDATION.md)。参考：[DSH 压缩文档](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/README.md)、[Strata](https://github.com/Niko1221/Strata)。
 
 MIT 许可。

@@ -136,19 +136,57 @@ async function readJSON(url, apiKey, { fetch: fetchImpl, timeout }) {
 
 function modelRecord(row) {
   if (!row || typeof row !== 'object' || !safeLabel(row.id)) return null;
+  const aliasOf = row.alias_of;
+  if (aliasOf !== undefined && (!safeLabel(aliasOf) || aliasOf === row.id)) {
+    fail('INVALID_MODELS', 'Strata returned an invalid model alias.');
+  }
+  const outputModalities = row.architecture?.output_modalities;
+  if (outputModalities !== undefined && (!Array.isArray(outputModalities) || !outputModalities.length
+    || !outputModalities.every(safeLabel) || new Set(outputModalities).size !== outputModalities.length)) {
+    fail('INVALID_MODELS', 'Strata returned invalid model output modalities.');
+  }
   return {
     id: row.id,
     name: safeLabel(row.name) ? row.name : row.id,
     status: (row.status === 'loaded' || row.status?.value === 'loaded') ? 'loaded' : 'not-loaded',
     contextWindow: isContext(row.meta?.n_ctx) ? row.meta.n_ctx : null,
     modalities: row.architecture?.input_modalities,
+    aliasOf,
+    outputModalities,
   };
 }
 
-function slotContext(payload, modelId, loadedCount) {
+function loadedTextModels(models) {
+  const byId = new Map(models.map(model => [model.id, model]));
+  const identities = new Map();
+  const roots = new Map();
+  for (const model of models.filter(row => row.status === 'loaded')) {
+    let root = model;
+    const visited = new Set();
+    while (root.aliasOf !== undefined) {
+      if (visited.has(root.id)) fail('INVALID_MODELS', 'Strata returned a cyclic model alias.');
+      visited.add(root.id);
+      root = byId.get(root.aliasOf);
+      if (!root || root.status !== 'loaded') {
+        fail('INVALID_MODELS', 'Strata returned a loaded alias without a loaded canonical model.');
+      }
+    }
+    // Older Strata builds omit output_modalities. Explicit image/audio outputs
+    // are separate generators, not additional loaded chat models.
+    if (root.outputModalities !== undefined && !root.outputModalities.includes('text')) continue;
+    if (model.outputModalities !== undefined && !model.outputModalities.includes('text')) {
+      fail('INVALID_MODELS', 'Strata returned conflicting model alias output modalities.');
+    }
+    roots.set(root.id, root);
+    identities.set(model.id, root.id);
+  }
+  return { loaded: [...roots.values()], identities };
+}
+
+function slotContext(payload, modelIds, loadedCount) {
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.slots) ? payload.slots : null;
   if (!rows || rows.length > 1024) return null;
-  const associated = rows.filter(row => row && [row.model, row.model_name, row.model_id].includes(modelId));
+  const associated = rows.filter(row => row && [row.model, row.model_name, row.model_id].some(id => modelIds.has(id)));
   // Unlabelled slots are only safe when the server exposes exactly one loaded model.
   const candidates = associated.length ? associated : loadedCount === 1
     ? rows.filter(row => row && !row.model && !row.model_name && !row.model_id) : [];
@@ -161,8 +199,9 @@ function slotContext(payload, modelId, loadedCount) {
 }
 
 /**
- * Fetch models and optional slots, selecting only explicitly loaded models.
- * Multiple loaded models require options.modelId. Credentials are never returned.
+ * Fetch models and optional slots, selecting explicitly loaded text models.
+ * Aliases resolve to the canonical model; multiple canonical text models require
+ * options.modelId. Credentials are never returned.
  */
 export async function discoverStrata(baseURL, apiKey = '', options = {}) {
   const normalized = normalizeBaseURL(baseURL);
@@ -183,22 +222,23 @@ export async function discoverStrata(baseURL, apiKey = '', options = {}) {
   if (new Set(models.map(model => model.id)).size !== models.length) {
     fail('INVALID_MODELS', 'Strata returned duplicate model identifiers.');
   }
-  const loaded = models.filter(model => model.status === 'loaded');
-  if (!loaded.length) fail('NO_LOADED_MODEL', 'Strata has no explicitly loaded model. Load a model in Strata first.');
+  const { loaded, identities } = loadedTextModels(models);
+  if (!loaded.length) fail('NO_LOADED_MODEL', 'Strata has no explicitly loaded text model. Load a text model in Strata first.');
   let selected;
   if (options.modelId !== undefined) {
-    selected = loaded.find(model => model.id === options.modelId);
+    selected = loaded.find(model => model.id === identities.get(options.modelId));
     if (!selected) fail('MODEL_NOT_LOADED', 'The selected model is not loaded on this server.');
   } else {
     if (loaded.length !== 1) fail('AMBIGUOUS_MODEL', 'Multiple models are loaded. Select a model before syncing.');
     selected = loaded[0];
   }
+  const selectedIds = new Set([...identities].filter(([, id]) => id === selected.id).map(([id]) => id));
   const warnings = [];
   let liveContext = null;
   try {
     const root = normalized.slice(0, -3);
     const slots = await readJSON(`${root}/slots`, apiKey, request);
-    liveContext = slotContext(slots, selected.id, loaded.length);
+    liveContext = slotContext(slots, selectedIds, loaded.length);
     if (liveContext === null) warnings.push('SLOTS_CONTEXT_UNAVAILABLE');
   } catch (error) {
     if (error.code === 'AMBIGUOUS_CONTEXT') throw error;
@@ -215,7 +255,7 @@ export async function discoverStrata(baseURL, apiKey = '', options = {}) {
     props = await readJSON(`${normalized.slice(0, -3)}/props?model=${encodeURIComponent(selected.id)}`, apiKey, request);
     evidence = {
       verifiedStrata: typeof props.build_info === 'string' && /^Strata \d+\.\d+(?:\.\d+)?(?:\b|$)/u.test(props.build_info),
-      modelMatched: props.model_alias === selected.id,
+      modelMatched: selectedIds.has(props.model_alias),
       templateHash: typeof props.chat_template === 'string'
         ? createHash('sha256').update(props.chat_template.replace(/\r\n/g, '\n')).digest('hex') : null,
     };

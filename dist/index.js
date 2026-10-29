@@ -16,7 +16,7 @@ const PACKAGE = '@ethan741205/dsh-strata-sync';
 const COMPACTION = '@deepseek-ai/dsh-compaction-basic';
 const PRESET = '@deepseek-ai/dsh-agent-preset';
 const CHANNEL = '/api/strata-sync';
-// Survives plugin hot reloads, but not a new DSH host process. One attempt per profile.
+// Survives plugin hot reloads, but not a new DSH host process. One completed attempt per profile.
 const startupKey = Symbol.for('@ethan741205/dsh-strata-sync/startup');
 const startupProfiles = globalThis[startupKey] ??= new Map();
 const clone = (value) => structuredClone(value);
@@ -59,6 +59,7 @@ export function apply(ctx, initialConfig) {
   let lastApplied = null;
   let lastError = null;
   let lastFingerprint = null;
+  const previewSnapshots = new WeakMap();
   function ensureOpen() { if (closed) refuse('disposed', 'Strata Sync was disabled or reloaded; this operation was cancelled.'); }
 
   function entry(name, id) {
@@ -93,12 +94,23 @@ export function apply(ctx, initialConfig) {
     return owners;
   }
   function snapshot() {
+    refreshSettings();
     const llmEntry = entry('@deepseek-ai/dsh-llm-pi-ai');
     const owners = compactionOwners();
     const defaultEntry = settings.followLoadedModel ? entry('@deepseek-ai/dsh-agent-default-model') : null;
     return { llmEntry, owners, defaultEntry,
       llm: clone(llmEntry.options.config ?? {}),
-      defaults: defaultEntry ? clone(defaultEntry.options.config ?? {}) : null };
+      defaults: defaultEntry ? clone(defaultEntry.options.config ?? {}) : null,
+      settings: publicSettings() };
+  }
+  function snapshotRevision(value) {
+    return hash({ llmId: value.llmEntry.options.id, llm: value.llm, owners: value.owners,
+      defaultId: value.defaultEntry?.options.id ?? null, defaults: value.defaults, settings: value.settings });
+  }
+  function assertSnapshot(before) {
+    if (snapshotRevision(before) !== snapshotRevision(snapshot())) {
+      refuse('stale-preview', 'The DSH settings changed during discovery. Review a fresh preview.');
+    }
   }
   async function checkPresets(owners) {
     for (const owner of owners) {
@@ -121,11 +133,15 @@ export function apply(ctx, initialConfig) {
     // DSH 0.2.1-rc.3 reports maintenance as idle while manual compaction can still run.
     return ctx.agents.list().some((agent) => agent.status !== 'idle' || agent.phase?.kind === 'maintenance');
   }
-  function publicSettings() {
-    return { providerId: settings.providerId, autoSync: settings.autoSync,
-      followLoadedModel: settings.followLoadedModel, outputTokens: settings.outputTokens ?? null };
+  function refreshSettings() {
+    settings = { providerId: '', autoSync: false, followLoadedModel: true, ...entry(PACKAGE).options.config };
+  }
+  function publicSettings(value = settings) {
+    return { providerId: value.providerId ?? '', autoSync: value.autoSync ?? false,
+      followLoadedModel: value.followLoadedModel ?? true, outputTokens: value.outputTokens ?? null };
   }
   function status() {
+    refreshSettings();
     let providers = [];
     try {
       const rows = entry('@deepseek-ai/dsh-llm-pi-ai').options.config?.providers ?? {};
@@ -135,7 +151,8 @@ export function apply(ctx, initialConfig) {
         return { id, baseURL };
       });
     } catch { /* The page remains usable when the required provider is absent. */ }
-    return { ...publicSettings(), busy: busy() || !!writeBarrier, providers, lastPreview, lastApplied, lastError };
+    return { ...publicSettings(), settingsRevision: hash(publicSettings()),
+      busy: busy() || !!writeBarrier, providers, lastPreview, lastApplied, lastError };
   }
   async function credential(providerId, route) {
     if (route.apiKeyEnv) {
@@ -160,16 +177,22 @@ export function apply(ctx, initialConfig) {
     const providerId = providerChoice(before.llm.providers ?? {}, request.providerId);
     const route = before.llm.providers[providerId];
     if (route.api && route.api !== 'openai-completions') refuse('unsupported-provider', 'Strata Sync currently supports the openai-completions adapter.');
+    if (!Array.isArray(route.models) || route.models.length === 0 || Object.keys(route.modelOverrides ?? {}).length) {
+      refuse('unsupported-route', 'Use a dedicated Strata provider with an explicit models list and no modelOverrides. Catalog-backed routes are not supported for synchronization.');
+    }
     const outputTokens = request.outputTokens === null ? undefined : request.outputTokens ?? settings.outputTokens;
     if (outputTokens !== undefined && (!Number.isSafeInteger(outputTokens) || outputTokens < 1)) refuse('invalid-budget', 'Output tokens must be a positive integer.');
     const apiKey = await credential(providerId, route);
     ensureOpen();
     const discovered = await discoverStrata(route.baseURL, apiKey);
     ensureOpen();
+    assertSnapshot(before);
     const budget = planBudget(discovered.model.contextWindow, { outputTokens, serverOutputTokens: discovered.model.serverOutputTokens });
     const configured = (route.models ?? []).find((model) => model.id === discovered.model.id);
     const capabilities = discovered.model.capabilities;
     const { edits: capabilityEdits, warnings: capabilityWarnings } = capabilityChanges(capabilities, route, configured);
+    const capabilityStatus = { input: capabilityEdits.input ? 'confirmed' : 'preserved',
+      reasoning: capabilityEdits.reasoningEfforts ? 'confirmed' : 'preserved' };
     discovered.warnings.push(...capabilityWarnings);
     const compactions = before.owners.flatMap((owner) => owner.targets.map((target) => {
       const base = target.config;
@@ -208,14 +231,21 @@ export function apply(ctx, initialConfig) {
       current[field] = values.every((value) => value === values[0]) ? values[0] : null;
     }
     // Fingerprint includes private config only as a one-way digest; no secret crosses the UI boundary.
-    const fingerprint = hash({ providerId, model: discovered.model, budget, settings: publicSettings(), profile: before.llm, compaction: before.owners, defaults: before.defaults });
+    const fingerprint = hash({ providerId, model: discovered.model, budget, profileRevision: snapshotRevision(before) });
     const warnings = [...discovered.warnings ?? [], ...(before.owners.some((owner) => owner.targets.some((target) => target.config.auto === false)) ? ['DSH_AUTO_COMPACTION_DISABLED'] : [])];
     const presetIds = before.owners.flatMap((owner) => owner.presetId ? [owner.presetId] : []);
-    const view = { providerId, server: { baseURL: discovered.baseURL, model: discovered.model, warnings }, budget, current, compactions, capabilityEdits,
+    const view = { providerId, server: { baseURL: discovered.baseURL, model: discovered.model, warnings }, budget, current, compactions, capabilityEdits, capabilityStatus,
       presetIds, needsNewConversation: presetIds.length > 0, changes, fingerprint, busy: busy() };
+    previewSnapshots.set(view, before);
     lastPreview = view;
     lastError = null;
     return view;
+  }
+  function appliedSummary(view, backupPath, applied) {
+    return { at: new Date().toISOString(), modelId: view.server.model.id, providerId: view.providerId, backupPath, applied,
+      budget: clone(view.budget), capabilityStatus: clone(view.capabilityStatus), warnings: clone(view.server.warnings),
+      serverOutputTokens: view.server.model.serverOutputTokens ?? null, outputLimitStatus: view.server.model.outputLimitStatus,
+      needsNewConversation: view.needsNewConversation };
   }
   async function backup() {
     ensureOpen();
@@ -239,15 +269,21 @@ export function apply(ctx, initialConfig) {
     const view = await preview({ ...(request.providerId ? { providerId: request.providerId } : {}), ...(own(request, 'outputTokens') ? { outputTokens: request.outputTokens } : {}) });
     ensureOpen();
     if (view.fingerprint !== request.fingerprint) refuse('stale-preview', 'The server or DSH settings changed. Review a fresh preview.');
-    if (view.changes.length === 0) return { applied: false, backupPath: null, preview: view };
+    const before = previewSnapshots.get(view);
+    assertSnapshot(before);
+    if (view.changes.length === 0) {
+      lastApplied = appliedSummary(view, null, false);
+      return { applied: false, backupPath: null, preview: view };
+    }
     if (busy()) refuse('busy', 'A DSH task started. Sync has been deferred.');
-    const before = snapshot();
     writeBarrier = new Promise((resolve) => { releaseWrite = resolve; });
     let backupPath;
     const completed = [];
     try {
       backupPath = await backup();
       ensureOpen();
+      assertSnapshot(before);
+      if (busy()) refuse('busy', 'A DSH task started. Sync has been deferred.');
       const modelId = view.server.model.id;
       const llmNext = clone(before.llm);
       const route = llmNext.providers[view.providerId];
@@ -281,13 +317,17 @@ export function apply(ctx, initialConfig) {
         if (hash(original) === hash(next)) continue;
         await ctx.configEditor.edit(entry(name, id), (current) => {
           ensureOpen();
+          if (busy()) refuse('busy', 'A DSH task started. Sync has been deferred.');
+          // ConfigEditor may queue this callback behind another settings edit.
+          // Recheck every owner when our first write actually begins.
+          if (completed.length === 0) assertSnapshot(before);
           if (hash(current) !== hash(original)) refuse('concurrent-change', 'DSH settings changed during sync. Preview again.');
           return next;
         });
         completed.push([name, id, original, next]);
         if (name === PRESET) await checkPresets([{ presetId: next.id }]);
       }
-      lastApplied = { at: new Date().toISOString(), modelId, providerId: view.providerId, backupPath };
+      lastApplied = appliedSummary(view, backupPath, true);
       lastFingerprint = view.fingerprint;
       lastError = null;
       return { applied: true, backupPath, preview: view };
@@ -311,7 +351,11 @@ export function apply(ctx, initialConfig) {
   }
   async function configure(request) {
     ensureOpen();
-    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens']);
+    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens', 'expectedRevision']);
+    refreshSettings();
+    if (typeof request.expectedRevision !== 'string' || request.expectedRevision !== hash(publicSettings())) {
+      refuse('stale-settings', 'Sync preferences changed. Reload the latest preferences before saving.');
+    }
     if (busy()) refuse('busy', 'Wait until all DSH tasks are idle before changing sync settings.');
     const next = { ...settings };
     if (own(request, 'providerId')) {
@@ -329,16 +373,26 @@ export function apply(ctx, initialConfig) {
       else refuse('invalid-budget', 'Output tokens must be a positive integer, or null for automatic budgeting.');
     }
     const self = entry(PACKAGE);
+    const original = clone(self.options.config ?? {});
     // Editing our own entry can dispose this plugin before edit() resolves.
     // Build the response while this Cordis scope is still alive; never read its
     // injected services after Loader replaces it.
     const response = { ...status(), providerId: next.providerId, autoSync: next.autoSync,
       followLoadedModel: next.followLoadedModel, outputTokens: next.outputTokens ?? null,
-      lastPreview: null, lastError: null };
+      settingsRevision: hash(publicSettings(next)), lastPreview: null, lastError: null };
     await backup();
     ensureOpen();
-    await ctx.configEditor.edit(self, () => { ensureOpen(); return next; });
+    await ctx.configEditor.edit(self, (current) => {
+      ensureOpen();
+      if (hash(current) !== hash(original) || hash(publicSettings(current)) !== request.expectedRevision) {
+        refuse('stale-settings', 'Sync preferences changed while saving. Reload the latest preferences.');
+      }
+      if (busy()) refuse('busy', 'Wait until all DSH tasks are idle before changing sync settings.');
+      return next;
+    });
     settings = next;
+    lastPreview = null;
+    lastError = null;
     return response;
   }
   function safeError(error) {
@@ -346,7 +400,7 @@ export function apply(ctx, initialConfig) {
     if (error instanceof StrataSyncError) return { code: error.code, message: error.message, details: {} };
     // Adapter/network exceptions may contain credential-bearing URLs or response bodies.
     // Only messages deliberately raised here are exposed verbatim.
-    const known = ['disposed','invalid-request','invalid-budget','provider-missing','provider-required','unsupported-profile','unsupported-provider','credential-unavailable','preview-required','busy','stale-preview','concurrent-change','rollback-required','preset-unavailable'];
+    const known = ['disposed','invalid-request','invalid-budget','provider-missing','provider-required','unsupported-profile','unsupported-provider','unsupported-route','credential-unavailable','preview-required','busy','stale-preview','stale-settings','concurrent-change','rollback-required','preset-unavailable'];
     return { code: known.includes(error?.code) ? error.code : 'sync-failed',
       message: known.includes(error?.code) ? error.message : 'Unable to synchronize. Check the Strata endpoint, connection, API-key credential and supported model metadata.', details: {} };
   }
@@ -415,17 +469,34 @@ export function apply(ctx, initialConfig) {
   let timer;
   const poll = async () => {
     if (closed || !startup.pending) return;
-    if (!settings.autoSync) { startup.pending = false; clearInterval(timer); return; }
-    if (busy() || inFlight) return;
-    // Consume before any await: HMR, errors and UI navigation must not run it again.
-    startup.pending = false;
-    clearInterval(timer);
+    try {
+      refreshSettings();
+      if (!settings.autoSync) { startup.pending = false; clearInterval(timer); return; }
+      if (busy() || inFlight || startup.running) return;
+    } catch (error) {
+      // The host can withdraw a required entry during reload. Do not leave an
+      // unhandled timer rejection or retry an unsupported profile indefinitely.
+      lastError = safeError(error);
+      startup.pending = false;
+      clearInterval(timer);
+      return;
+    }
+    // Discovery can outlive an idle period. Busy/disposed attempts keep the one
+    // startup operation pending; successful/no-op and terminal errors consume it.
+    startup.running = true;
+    let deferred = false;
     try {
       await run(async () => {
         const view = await preview();
         if (view.changes.length && view.fingerprint !== lastFingerprint) await applyPreview({ fingerprint: view.fingerprint, providerId: view.providerId });
       });
-    } catch (error) { lastError = safeError(error); }
+    } catch (error) {
+      lastError = safeError(error);
+      deferred = error?.code === 'busy' || (closed && error?.code === 'disposed');
+    } finally {
+      startup.running = false;
+      if (!deferred) { startup.pending = false; clearInterval(timer); }
+    }
   };
   // DSH 0.2.1-rc.3 can activate us inside HMR's AsyncLocalStorage transaction.
   // A timer otherwise inherits that transaction forever, so later ConfigEditor

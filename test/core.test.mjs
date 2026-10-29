@@ -85,6 +85,99 @@ test('multiple models require explicit selection and matching slots', async () =
   assert.equal(result.model.contextWindow, 32768);
 });
 
+test('loaded aliases collapse to the canonical text model and its metadata', async () => {
+  const canonical = { ...loaded(), architecture: { input_modalities: ['text'], output_modalities: ['text'] } };
+  const aliases = [
+    { ...loaded('coding', 65536), alias_of: 'qwen', architecture: { input_modalities: ['text', 'image'], output_modalities: ['text'] } },
+    { ...loaded('default'), alias_of: 'coding' },
+  ];
+  const calls = [];
+  const result = await discoverStrata('https://strata.test', '', { fetch: async url => {
+    calls.push(url);
+    return stub([...aliases, canonical], [])(url);
+  } });
+  assert.equal(result.model.id, 'qwen');
+  assert.equal(result.model.contextWindow, 32768);
+  assert.deepEqual(result.model.capabilities.input, ['text']);
+  assert.equal(result.model.contextSource, 'models.meta.n_ctx');
+  assert.equal(calls.at(-1), 'https://strata.test/props?model=qwen');
+  const explicit = await discoverStrata('https://strata.test', '', { modelId: 'default', fetch: stub([...aliases, canonical]) });
+  assert.equal(explicit.model.id, 'qwen');
+  assert.equal(explicit.model.contextSource, 'slots.n_ctx');
+});
+
+test('image generation entries and their aliases do not cause text model ambiguity', async () => {
+  const image = { ...loaded('image-generator'), architecture: { input_modalities: ['text'], output_modalities: ['image'] } };
+  const alias = { ...loaded('image-alias'), alias_of: 'image-generator' };
+  // Text model deliberately omits output_modalities for older Strata versions.
+  const result = await discoverStrata('https://strata.test', '', { fetch: stub([image, loaded(), alias]) });
+  assert.equal(result.model.id, 'qwen');
+  assert.equal(result.model.contextSource, 'slots.n_ctx');
+  await assert.rejects(discoverStrata('https://strata.test', '', { fetch: stub([image, alias]) }), errorCode('NO_LOADED_MODEL'));
+  await assert.rejects(discoverStrata('https://strata.test', '', { modelId: 'image-generator', fetch: stub([loaded(), image]) }), errorCode('MODEL_NOT_LOADED'));
+});
+
+test('aliases do not hide genuine multiple text models or trust unassociated slots', async () => {
+  const rows = [loaded(), { ...loaded('coding'), alias_of: 'qwen' }, loaded('deepseek')];
+  await assert.rejects(discoverStrata('https://strata.test', '', { fetch: stub(rows) }), errorCode('AMBIGUOUS_MODEL'));
+  const selected = await discoverStrata('https://strata.test', '', {
+    modelId: 'coding', fetch: stub(rows, [{ model: 'coding', n_ctx: 16384 }, { model: 'deepseek', n_ctx: 65536 }]),
+  });
+  assert.equal(selected.model.id, 'qwen');
+  assert.equal(selected.model.contextWindow, 16384);
+  const unlabelled = await discoverStrata('https://strata.test', '', { modelId: 'coding', fetch: stub(rows, [{ n_ctx: 16384 }]) });
+  assert.equal(unlabelled.model.contextWindow, 32768);
+  assert.equal(unlabelled.model.contextSource, 'models.meta.n_ctx');
+});
+
+test('canonical and alias slot capacities must agree', async () => {
+  const rows = [loaded(), { ...loaded('coding'), alias_of: 'qwen' }];
+  await assert.rejects(discoverStrata('https://strata.test', '', {
+    fetch: stub(rows, [{ model: 'qwen', n_ctx: 32768 }, { model: 'coding', n_ctx: 16384 }]),
+  }), errorCode('AMBIGUOUS_CONTEXT'));
+});
+
+test('loaded aliases must resolve to an existing loaded canonical model', async () => {
+  const malformed = [
+    [{ ...loaded('coding'), alias_of: 'absent' }],
+    [loaded(), { ...loaded('coding'), alias_of: '' }],
+    [loaded(), { ...loaded('coding'), alias_of: null }],
+    [loaded(), { ...loaded('coding'), alias_of: 'coding' }],
+    [{ ...loaded('a'), alias_of: 'b' }, { ...loaded('b'), alias_of: 'a' }],
+    [{ ...loaded(), status: 'unloaded' }, { ...loaded('coding'), alias_of: 'qwen' }],
+    [loaded(), { ...loaded('coding'), alias_of: 'qwen', architecture: { output_modalities: ['image'] } }],
+  ];
+  for (const rows of malformed) {
+    await assert.rejects(discoverStrata('https://strata.test', '', { fetch: stub(rows) }), errorCode('INVALID_MODELS'));
+  }
+  // Alias metadata cannot stand in for missing canonical context evidence.
+  await assert.rejects(discoverStrata('https://strata.test', '', {
+    fetch: stub([{ id: 'qwen', status: 'loaded' }, { ...loaded('coding'), alias_of: 'qwen' }], []),
+  }), errorCode('CONTEXT_UNAVAILABLE'));
+});
+
+test('malformed output modalities cannot be mistaken for a legacy text model', async () => {
+  for (const output_modalities of [null, [], 'text', ['text', 'text'], [''], [123]]) {
+    await assert.rejects(discoverStrata('https://strata.test', '', {
+      fetch: stub([{ ...loaded(), architecture: { output_modalities } }]),
+    }), errorCode('INVALID_MODELS'));
+  }
+});
+
+test('output props accept only identities belonging to the selected canonical model', async () => {
+  const rows = [loaded(), { ...loaded('coding'), alias_of: 'qwen' }, loaded('deepseek'), { ...loaded('other-alias'), alias_of: 'deepseek' }];
+  for (const [model_alias, expected] of [['qwen', 8192], ['coding', 8192], ['other-alias', null], ['unlisted-alias', null]]) {
+    const result = await discoverStrata('https://strata.test', '', {
+      modelId: 'coding', fetch: async url => url.includes('/props?')
+        ? json({ build_info: 'Strata 0.2.7', model_alias, default_generation_settings: { params: { n_predict: 8192 } } })
+        : stub(rows, [{ model: 'qwen', n_ctx: 32768 }])(url),
+    });
+    assert.equal(result.model.id, 'qwen');
+    assert.equal(result.model.serverOutputTokens, expected);
+    assert.equal(result.model.outputLimitStatus, expected ? 'server' : 'unverified');
+  }
+});
+
 test('unknown capacity is rejected rather than guessed', async () => {
   await assert.rejects(discoverStrata('https://strata.test', '', { fetch: stub([{ id: 'qwen', status: 'loaded' }], []) }), errorCode('CONTEXT_UNAVAILABLE'));
 });

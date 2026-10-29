@@ -264,6 +264,31 @@ window.__ModuleLoader__.load({
     "zh-Hans": "服务器诊断："
   }
 };
+    Object.assign(translations, {
+      'Follow Strata output limit': {'zh-Hant':'輸出上限跟隨 Strata','zh-Hans':'输出上限跟随 Strata'},
+      'Use the verified server default. If none is available, calculate 30% of context, up to 16,384 tokens.': {'zh-Hant':'採用已確認的伺服器預設值；無固定值時，以上下文的 30% 計算，最多 16,384 tokens。','zh-Hans':'采用已确认的服务器默认值；无固定值时，按上下文的 30% 计算，最多 16,384 tokens。'},
+      'Advanced settings': {'zh-Hant':'進階設定','zh-Hans':'高级设置'},
+      'Manual output limit': {'zh-Hant':'手動輸出上限','zh-Hans':'手动输出上限'},
+      'Turn off Follow Strata output limit to enter a manual override.': {'zh-Hant':'關閉「輸出上限跟隨 Strata」後，可輸入手動覆寫值。','zh-Hans':'关闭“输出上限跟随 Strata”后，可输入手动覆盖值。'},
+      'A manual limit takes priority over the server default and automatic calculation.': {'zh-Hant':'手動上限優先於伺服器預設值與自動計算。','zh-Hans':'手动上限优先于服务器默认值与自动计算。'},
+      'Preferences changed in another window. Reload the latest preferences before saving; this discards your unsaved edits.': {'zh-Hant':'另一個視窗已變更偏好。儲存前請重新載入最新偏好，這會捨棄本視窗未儲存的編輯。','zh-Hans':'另一个窗口已更改偏好。保存前请重新加载最新偏好，这会丢弃此窗口未保存的编辑。'},
+      'Reload latest preferences': {'zh-Hant':'重新載入最新偏好','zh-Hans':'重新加载最新偏好'},
+      'Latest synchronization result': {'zh-Hant':'最近同步結果','zh-Hans':'最近同步结果'},
+      'This records the last synchronization, not a live server check.': {'zh-Hant':'這是最近一次同步的紀錄，並非伺服器即時狀態。','zh-Hans':'这是最近一次同步的记录，并非服务器实时状态。'},
+      'Server-provided output limit': {'zh-Hant':'伺服器提供的輸出上限','zh-Hans':'服务器提供的输出上限'},
+      'Effective output limit': {'zh-Hant':'實際套用的輸出上限','zh-Hans':'实际应用的输出上限'},
+      'No fixed limit': {'zh-Hant':'無固定上限','zh-Hans':'无固定上限'},
+      'Not verified': {'zh-Hant':'尚未確認','zh-Hans':'尚未确认'},
+      'Check differences to read the server and effective limits.': {'zh-Hant':'點選「檢查差異」以讀取伺服器與實際套用的上限。','zh-Hans':'点击“检查差异”以读取服务器与实际应用的上限。'},
+      'Confirmed settings are aligned.': {'zh-Hant':'已確認的設定已對齊。','zh-Hans':'已确认的设置已对齐。'},
+      'All synchronized settings are confirmed and aligned.': {'zh-Hant':'所有同步項目均已確認並對齊。','zh-Hans':'所有同步项均已确认并对齐。'},
+      'Preserved without confirmation: ': {'zh-Hant':'未能確認，保留原值：','zh-Hans':'无法确认，保留原值：'},
+      'items': {'zh-Hant':'項','zh-Hans':'项'},
+      'item': {'zh-Hant':'項','zh-Hans':'项'},
+      'Backup created': {'zh-Hant':'已建立備份','zh-Hans':'已创建备份'},
+      'No settings changed; no new backup was needed.': {'zh-Hant':'設定未變更，無須建立新備份。','zh-Hans':'设置未更改，无需创建新备份。'},
+      'This provider uses an unsupported model catalog configuration. Configure an explicit custom model list in DSH before syncing.': {'zh-Hant':'此供應者使用目前不支援的模型目錄設定。請先在 DSH 設定明確的自訂模型清單，再同步。','zh-Hans':'此提供方使用目前不支持的模型目录设置。请先在 DSH 设置明确的自定义模型列表，再同步。'},
+    });
     const labels = {
       input: 'Input types', reasoningEfforts: 'Reasoning levels', compat: 'Reasoning request mapping', contextWindow: 'Context window', outputTokens: 'Response output limit', headroomTokens: 'Compaction headroom',
       summaryMaxTokens: 'Summary output limit', thresholdTokens: 'Compaction threshold', retainTokens: 'Recent conversation retention',
@@ -297,72 +322,139 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         return format(value);
       };
       const diagnostic = (message) => translations[message] ? t(message) : language === 'en' ? message : t('Server diagnostic: ') + message;
-      const [state, setState] = React.useState(null), [preview, setPreview] = React.useState(null);
-      const [providerId, setProviderId] = React.useState(''), [output, setOutput] = React.useState('');
-      const [auto, setAuto] = React.useState(false), [follow, setFollow] = React.useState(true);
-      const [pending, setPending] = React.useState(false), [error, setError] = React.useState('');
-      const [notice, setNotice] = React.useState('');
-      const refresh = React.useCallback(async () => {
-        const s = await rpc('status', {}); setState(s); return s;
-      }, [rpc]);
-      React.useEffect(() => {
-        let disposed = false;
-        rpc('status', {}).then(s => {
-          if (disposed) return; setState(s); setProviderId(s.providerId || s.providers?.[0]?.id || '');
-          setOutput(s.outputTokens == null ? '' : String(s.outputTokens)); setAuto(s.autoSync); setFollow(s.followLoadedModel);
-        }).catch(e => { if (!disposed) setError(e.message); });
-        const timer = setInterval(() => { refresh().catch(() => {}); }, 15000);
-        return () => { disposed = true; clearInterval(timer); };
-      }, [rpc, refresh]);
-      async function action(fn) { setPending(true); setError(''); setNotice(''); try { await fn(); } catch(e) { setError(e.message || 'The operation failed.'); } finally { setPending(false); } }
-      const outputTokens = output.trim() === '' ? null : Number(output);
-      const valid = outputTokens === null || Number.isSafeInteger(outputTokens) && outputTokens > 0;
-      const dirty = !!state && (providerId !== state.providerId || outputTokens !== state.outputTokens || auto !== state.autoSync || follow !== state.followLoadedModel);
-      return h('section', {className:'strata-sync', 'aria-label':'Strata Sync'},
-        h('style', null, css),
-        h('header', null, h('h2',null,'Strata Sync'), h('p',{className:'ss-muted'},t("Align DSH with the model loaded by Strata Server. The server supplies model, context and any fixed output default; this plugin calculates fallback output and compaction budgets."))),
-        !state && !error && h('div',{className:'ss-status',role:'status'},t("Loading sync settings...")),
-        state?.busy && h('div',{className:'ss-status',role:'status'},t("DSH is running a task. Synchronization will wait until all tasks are idle.")),
-        error && h('div',{className:'ss-status ss-error',role:'alert'},diagnostic(error)),
-        notice && h('div',{className:'ss-status',role:'status'},t(notice)),
-        h('div',{className:'ss-grid'},
-          h('label',null,t("Strata provider"),h('select',{value:providerId,onChange:e=>{setProviderId(e.target.value);setPreview(null);},disabled:pending||!state},
-            h('option',{value:''},t("Choose an existing provider")), ...(state?.providers||[]).map(p=>h('option',{key:p.id,value:p.id},p.id)))),
-          h('label',null,t("Output limit override (blank to follow Strata)"),h('input',{type:'number',min:1,step:1,value:output,placeholder:t("Strata default, otherwise automatic"),onChange:e=>{setOutput(e.target.value);setPreview(null);},disabled:pending||!state}))),
-        h('p',{className:'ss-muted'},t("Leave blank to use the server output default; if absent or unlimited, use 30% of context, up to 16,384. An explicit override takes priority.")),
-        h('p',{className:'ss-muted'},t("Uses the URL and credentials already configured in DSH. API keys are never displayed or copied here.")),
-        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:follow,onChange:e=>{setFollow(e.target.checked);setPreview(null);},disabled:pending||!state}),t("Follow the loaded Strata model as the default")),
-        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:auto,onChange:e=>setAuto(e.target.checked),disabled:pending||!state}),t("Automatically sync when DSH starts")),
-        h('p',{className:'ss-muted'},t("Runs once on the next DSH start. Waits for running tasks to finish; no periodic server checks.")),
+      const [state,setState] = React.useState(null), [preview,setPreview] = React.useState(null), [result,setResult] = React.useState(null);
+      const [form,setForm] = React.useState({providerId:'',output:'',manual:false,auto:false,follow:true});
+      const [pending,setPending] = React.useState(false), [error,setError] = React.useState(''), [loadError,setLoadError] = React.useState('');
+      const [notice,setNotice] = React.useState(''), [conflict,setConflict] = React.useState(false);
+      const formRef=React.useRef(form), baseline=React.useRef(null), requestSeq=React.useRef(0), alive=React.useRef(true);
+      const values = (f) => ({providerId:f.providerId,outputTokens:f.manual ? (f.output.trim()==='' ? NaN : Number(f.output)) : null,autoSync:f.auto,followLoadedModel:f.follow});
+      const preferences = (s) => ({providerId:s.providerId || '',outputTokens:s.outputTokens ?? null,autoSync:!!s.autoSync,followLoadedModel:s.followLoadedModel !== false});
+      const equal = (a,b) => Object.keys(a).every(key=>Object.is(a[key],b[key]));
+      const acceptStatus = React.useCallback((s,force=false) => {
+        if (!alive.current) return;
+        const next=preferences(s), old=baseline.current;
+        const untouched=!old || equal(values(formRef.current),old.values);
+        if (force || untouched) {
+          const nextForm={providerId:next.providerId,output:next.outputTokens==null?'':String(next.outputTokens),manual:next.outputTokens!=null,auto:next.autoSync,follow:next.followLoadedModel};
+          formRef.current=nextForm; setForm(nextForm); setConflict(false);
+          baseline.current={values:next,revision:s.settingsRevision};
+        } else if (old.revision!==s.settingsRevision || !equal(old.values,next)) {
+          setConflict(true);
+        }
+        if (old && (old.revision!==s.settingsRevision || !equal(old.values,next))) setPreview(null);
+        setState(s); setLoadError('');
+      },[]);
+      const refresh=React.useCallback(async (force=false) => {
+        const seq=++requestSeq.current;
+        const s=await rpc('status',{});
+        if (seq===requestSeq.current) acceptStatus(s,force);
+        return s;
+      },[rpc,acceptStatus]);
+      React.useEffect(()=>{
+        alive.current=true;
+        const read=()=>refresh().catch(e=>{if(alive.current)setLoadError(e.message);});
+        read(); const timer=setInterval(read,15000);
+        return ()=>{alive.current=false;requestSeq.current++;clearInterval(timer);};
+      },[refresh]);
+      function edit(patch) {
+        const next={...formRef.current,...patch};formRef.current=next;setForm(next);setPreview(null);setNotice('');
+      }
+      async function action(fn) {
+        setPending(true);setError('');setNotice('');
+        try { await fn(); }
+        catch(e) {
+          if(e.code==='stale-settings') { setConflict(true); await refresh().catch(()=>{}); }
+          else setError(e.code==='unsupported-route'?'This provider uses an unsupported model catalog configuration. Configure an explicit custom model list in DSH before syncing.':e.message||'The operation failed.');
+        } finally { if(alive.current)setPending(false); }
+      }
+      const draft=values(form), valid=draft.outputTokens===null || Number.isSafeInteger(draft.outputTokens)&&draft.outputTokens>0;
+      const dirty=!!baseline.current&&!equal(draft,baseline.current.values);
+      const displayedResult=!result || state?.lastApplied?.at>result.at ? state?.lastApplied : result;
+      const activeBudget=preview?.budget;
+      const outputSource=(budget)=>t(({server:'Strata Server default',manual:'Manual override',calculated:'Automatic calculation'})[budget?.outputSource]||'Automatic calculation');
+      const preserved=(view)=>{
+        const status=view?.capabilityStatus;
+        return [(!status ? !view?.server?.model?.capabilities?.input : status.input!=='confirmed')?'Input types':null,
+          (!status ? !view?.capabilityEdits?.reasoningEfforts : status.reasoning!=='confirmed')?'Reasoning levels':null].filter(Boolean);
+      };
+      const alignment=(view)=>{
+        const kept=preserved(view);
+        return h('div',{className:'ss-status','data-testid':'alignment'},
+          h('p',null,t(kept.length?'Confirmed settings are aligned.':'All synchronized settings are confirmed and aligned.')),
+          kept.length>0&&h('p',null,t('Preserved without confirmation: '),kept.length,' ',t(kept.length===1?'item':'items'),' — ',kept.map(t).join(', ')));
+      };
+      const serverLimit=(model)=>model?.serverOutputTokens!=null?format(model.serverOutputTokens):t(['missing','unlimited'].includes(model?.outputLimitStatus)?'No fixed limit':'Not verified');
+      const outputValues=(budget,model)=>h('div',{className:'ss-grid'},
+        h('div',null,h('strong',null,serverLimit(model)),h('div',{className:'ss-muted'},t('Server-provided output limit'))),
+        h('div',null,h('strong',null,format(budget?.outputTokens)),h('div',{className:'ss-muted'},t('Effective output limit'))),
+        h('div',null,h('strong',null,outputSource(budget)),h('div',{className:'ss-muted'},t('Output limit source: '))));
+      const warnings=(items)=>(items||[]).map((w,i)=>h('div',{key:i,className:'ss-status ss-error'},typeof w==='string'?(t(warningText[w])||(w.startsWith('SLOTS_')?t('Live slot information is unavailable. Using the model context reported by Strata.'):w)):JSON.stringify(w)));
+      return h('section',{className:'strata-sync','aria-label':'Strata Sync'},
+        h('style',null,css),
+        h('header',null,h('h2',null,'Strata Sync'),h('p',{className:'ss-muted'},t('Align DSH with the model loaded by Strata Server. The server supplies model, context and any fixed output default; this plugin calculates fallback output and compaction budgets.'))),
+        !state&&!loadError&&h('div',{className:'ss-status',role:'status'},t('Loading sync settings...')),
+        state?.busy&&h('div',{className:'ss-status',role:'status'},t('DSH is running a task. Synchronization will wait until all tasks are idle.')),
+        (error||loadError)&&h('div',{className:'ss-status ss-error',role:'alert'},diagnostic(error||loadError)),
+        notice&&h('div',{className:'ss-status',role:'status'},t(notice)),
+        conflict&&h('div',{className:'ss-status ss-error'},
+          h('p',null,t('Preferences changed in another window. Reload the latest preferences before saving; this discards your unsaved edits.')),
+          h('button',{disabled:pending,onClick:()=>action(()=>refresh(true))},t('Reload latest preferences'))),
+        h('label',null,t('Strata provider'),h('select',{value:form.providerId,onChange:e=>edit({providerId:e.target.value}),disabled:pending||!state},
+          h('option',{value:''},t('Choose an existing provider')),...(state?.providers||[]).map(p=>h('option',{key:p.id,value:p.id},p.id)))),
+        h('p',{className:'ss-muted'},t('Uses the URL and credentials already configured in DSH. API keys are never displayed or copied here.')),
+        h('div',{className:'ss-card'},
+          h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:!form.manual,'aria-label':t('Follow Strata output limit'),onChange:e=>edit({manual:!e.target.checked}),disabled:pending||!state}),t('Follow Strata output limit')),
+          h('p',{className:'ss-muted'},t('Use the verified server default. If none is available, calculate 30% of context, up to 16,384 tokens.')),
+          activeBudget?outputValues(activeBudget,preview.server?.model):h('p',{className:'ss-muted'},t('Check differences to read the server and effective limits.')),
+          h('details',{className:'ss-details',open:form.manual},h('summary',null,t('Advanced settings')),
+            h('label',null,t('Manual output limit'),h('input',{type:'number',min:1,step:1,value:form.output,onChange:e=>edit({output:e.target.value}),disabled:pending||!state||!form.manual})),
+            h('p',{className:'ss-muted'},t(form.manual?'A manual limit takes priority over the server default and automatic calculation.':'Turn off Follow Strata output limit to enter a manual override.')))),
+        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.follow,onChange:e=>edit({follow:e.target.checked}),disabled:pending||!state}),t('Follow the loaded Strata model as the default')),
+        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.auto,onChange:e=>edit({auto:e.target.checked}),disabled:pending||!state}),t('Automatically sync when DSH starts')),
+        h('p',{className:'ss-muted'},t('Runs once on the next DSH start. Waits for running tasks to finish; no periodic server checks.')),
         h('div',{className:'ss-actions'},
-          h('button',{disabled:pending||!providerId||!valid||!dirty,onClick:()=>action(async()=>{const s=await rpc('configure',{providerId,autoSync:auto,followLoadedModel:follow,outputTokens});setState(s);setPreview(null);setNotice('Sync preferences saved.');})},t("Save preferences")),
-          h('button',{disabled:pending||!providerId||dirty||!valid,onClick:()=>action(async()=>{setPreview(await rpc('preview',{providerId}));await refresh();})},pending?t("Working..."):t("Check differences")),
-          h('button',{className:'primary',disabled:pending||dirty||!preview||state?.busy||preview.busy||!preview.changes?.length,onClick:()=>action(async()=>{const r=await rpc('apply',{fingerprint:preview.fingerprint,providerId});setPreview(null);setNotice(r.applied?'Synced and backed up the original settings. Start a new conversation to use the updated compaction policy.':'Settings already match. No changes needed.');await refresh();})},t("Back up and sync"))),
-        dirty && h('p',{className:'ss-muted'},t("Save preferences before checking for differences.")),
-        preview && h('div',{className:'ss-card'},
-          h('strong',null,'Strata Server'), h('p',null,h('code',null,preview.server?.model?.id)),
+          h('button',{disabled:pending||!state||!form.providerId||!valid||!dirty||conflict,onClick:()=>action(async()=>{
+            const changes=Object.fromEntries(Object.entries(values(formRef.current)).filter(([key,value])=>!Object.is(value,baseline.current.values[key])));
+            const s=await rpc('configure',{...changes,expectedRevision:baseline.current.revision});
+            requestSeq.current++;acceptStatus(s,true);setPreview(null);setNotice('Sync preferences saved.');
+          })},t('Save preferences')),
+          h('button',{disabled:pending||!state||!form.providerId||dirty||conflict||!valid,onClick:()=>action(async()=>{setPreview(await rpc('preview',{providerId:form.providerId}));await refresh();})},pending?t('Working...'):t('Check differences')),
+          h('button',{className:'primary',disabled:pending||!state||dirty||conflict||!preview||state.busy||!preview.changes?.length,onClick:()=>action(async()=>{
+            const r=await rpc('apply',{fingerprint:preview.fingerprint,providerId:form.providerId});
+            const view=r.preview||preview;
+            setResult({at:new Date().toISOString(),modelId:view.server?.model?.id,providerId:view.providerId||form.providerId,budget:view.budget,capabilityStatus:view.capabilityStatus,serverOutputTokens:view.server?.model?.serverOutputTokens,outputLimitStatus:view.server?.model?.outputLimitStatus,backupPath:r.backupPath,applied:r.applied,warnings:view.server?.warnings});
+            setPreview(null);setNotice(r.applied?'Synced and backed up the original settings. Start a new conversation to use the updated compaction policy.':'Settings already match. No changes needed.');await refresh();
+          })},t('Back up and sync'))),
+        dirty&&!conflict&&h('p',{className:'ss-muted'},t('Save preferences before checking for differences.')),
+        preview&&h('div',{className:'ss-card'},
+          h('strong',null,'Strata Server'),h('p',null,h('code',null,preview.server?.model?.id)),
           h('div',{className:'ss-grid'},
-            h('div',null,h('strong',null,format(preview.budget?.contextWindow)),h('div',{className:'ss-muted'},t("Context tokens"))),
-            h('div',null,h('strong',null,format(preview.budget?.outputTokens)),h('div',{className:'ss-muted'},t("Response output limit"))),
-            h('div',null,h('strong',null,format(preview.budget?.summaryMaxTokens)),h('div',{className:'ss-muted'},t("Summary output limit")))),
-          h('p',{className:'ss-muted'},t('Output limit source: '),t(({server:'Strata Server default',manual:'Manual override',calculated:'Automatic calculation'})[preview.budget?.outputSource] || 'Automatic calculation')),
-          ['missing','unlimited'].includes(preview.server?.model?.outputLimitStatus) && h('p',{className:'ss-muted'},t('Server has no fixed output limit.')),
-          ['unavailable','unverified'].includes(preview.server?.model?.outputLimitStatus) && h('p',{className:'ss-muted'},t('Server output limit could not be verified.')),
-          h('p',null,t('Input types'),': ',preview.server?.model?.capabilities?.input ? t(preview.server.model.capabilities.input.includes('image')?'Text + image':'Text') : t('Unconfirmed — keep current setting')),
-          h('p',null,t('Reasoning levels'),': ',preview.capabilityEdits?.reasoningEfforts ? Object.keys(preview.capabilityEdits.reasoningEfforts).join(' / ') : t('Unconfirmed — keep current setting')),
-          preview.capabilityEdits?.reasoningEfforts && h('p',{className:'ss-muted'},t('Verified template: '),preview.server.model.capabilities.reasoning.family),
+            h('div',null,h('strong',null,format(preview.budget?.contextWindow)),h('div',{className:'ss-muted'},t('Context tokens'))),
+            h('div',null,h('strong',null,format(preview.budget?.outputTokens)),h('div',{className:'ss-muted'},t('Response output limit'))),
+            h('div',null,h('strong',null,format(preview.budget?.summaryMaxTokens)),h('div',{className:'ss-muted'},t('Summary output limit')))),
+          h('p',{className:'ss-muted'},t('Output limit source: '),outputSource(preview.budget)),
+          ['missing','unlimited'].includes(preview.server?.model?.outputLimitStatus)&&h('p',{className:'ss-muted'},t('Server has no fixed output limit.')),
+          ['unavailable','unverified'].includes(preview.server?.model?.outputLimitStatus)&&h('p',{className:'ss-muted'},t('Server output limit could not be verified.')),
+          h('p',null,t('Input types'),': ',preview.server?.model?.capabilities?.input?t(preview.server.model.capabilities.input.includes('image')?'Text + image':'Text'):t('Unconfirmed — keep current setting')),
+          h('p',null,t('Reasoning levels'),': ',preview.capabilityEdits?.reasoningEfforts?Object.keys(preview.capabilityEdits.reasoningEfforts).join(' / '):t('Unconfirmed — keep current setting')),
+          preview.capabilityEdits?.reasoningEfforts&&h('p',{className:'ss-muted'},t('Verified template: '),preview.server?.model?.capabilities?.reasoning?.family),
           h('p',{className:'ss-muted'},t('Only verified capabilities are synchronized. Unknown fields keep their existing values. Reasoning choices do not change the selected effort.')),
-          h('p',{className:'ss-muted'},t("Context source: "),preview.server?.model?.contextSource||t("Server model metadata")),
-          preview.presetIds?.length > 0 && h('p',{className:'ss-muted'},t("Affected presets: "),preview.presetIds.join(', '),t(". Existing conversations retain their preset revision. Start a new conversation to use the updated compaction budget.")),
-          ...(preview.server?.warnings||[]).map((w,i)=>h('div',{key:i,className:'ss-status ss-error'},typeof w==='string'?(t(warningText[w])||(w.startsWith('SLOTS_')?t("Live slot information is unavailable. Using the model context reported by Strata."):w)):JSON.stringify(w))),
-          preview.changes?.length > 0 && h('div',{className:'ss-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',{scope:'col'},t("Setting")),h('th',{scope:'col'},t("Current")),h('th',{scope:'col'},t("After sync")))),
-            h('tbody',null,...(preview.changes||[]).map(c=>h('tr',{key:(c.target||'')+c.field},h('th',{scope:'row'},t(labels[c.field]||c.field),c.target&&h('span',{className:'ss-target',title:c.target},c.target)),h('td',{className:'ss-before','data-label':t('Current')},renderValue(c.field,c.before)),h('td',{className:'ss-after','data-label':t('After sync')},renderValue(c.field,c.after))))))),
-          !preview.changes?.length && h('p',null,t("Settings are aligned.")),
-          h('p',null,t("Effective compaction threshold: "),format(preview.budget?.thresholdTokens),' tokens (',preview.budget?.thresholdPercent?.toFixed(2),'%)'),
-          h('p',{className:'ss-muted'},t("Only DSH settings are updated. Sync does not switch server models, change Strata configuration, or send inference requests. Start a new conversation after syncing."))),
-        state?.lastApplied && h('p',{className:'ss-muted'},t("Last sync: "),format(state.lastApplied?.at||state.lastApplied?.time||state.lastApplied)),
-        state?.lastApplied?.backupPath && h('p',{className:'ss-muted'},t("Original settings backup: "),h('code',null,state.lastApplied.backupPath)),
-        state?.lastError && h('div',{className:'ss-status ss-error'},diagnostic(typeof state.lastError==='string'?state.lastError:state.lastError.message)));
+          h('p',{className:'ss-muted'},t('Context source: '),preview.server?.model?.contextSource||t('Server model metadata')),
+          preview.presetIds?.length>0&&h('p',{className:'ss-muted'},t('Affected presets: '),preview.presetIds.join(', '),t('. Existing conversations retain their preset revision. Start a new conversation to use the updated compaction budget.')),
+          ...warnings(preview.server?.warnings),
+          preview.changes?.length>0&&h('div',{className:'ss-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',{scope:'col'},t('Setting')),h('th',{scope:'col'},t('Current')),h('th',{scope:'col'},t('After sync')))),
+            h('tbody',null,...preview.changes.map(c=>h('tr',{key:(c.target||'')+c.field},h('th',{scope:'row'},t(labels[c.field]||c.field),c.target&&h('span',{className:'ss-target',title:c.target},c.target)),h('td',{className:'ss-before','data-label':t('Current')},renderValue(c.field,c.before)),h('td',{className:'ss-after','data-label':t('After sync')},renderValue(c.field,c.after))))))),
+          !preview.changes?.length&&alignment(preview),
+          h('p',null,t('Effective compaction threshold: '),format(preview.budget?.thresholdTokens),' tokens (',preview.budget?.thresholdPercent?.toFixed(2),'%)'),
+          h('p',{className:'ss-muted'},t('Only DSH settings are updated. Sync does not switch server models, change Strata configuration, or send inference requests. Start a new conversation after syncing.'))),
+        displayedResult?.budget&&h('div',{className:'ss-card','data-testid':'sync-result'},
+          h('strong',null,t('Latest synchronization result')),h('p',{className:'ss-muted'},t('This records the last synchronization, not a live server check.')),
+          h('p',null,t('Model'),': ',h('code',null,displayedResult.modelId)),h('p',null,t('Context window'),': ',format(displayedResult.budget.contextWindow)),
+          outputValues(displayedResult.budget,displayedResult),alignment(displayedResult),
+          h('p',null,t(displayedResult.backupPath?'Backup created':'No settings changed; no new backup was needed.')),
+          displayedResult.backupPath&&h('p',{className:'ss-muted'},t('Original settings backup: '),h('code',null,displayedResult.backupPath)),
+          h('p',{className:'ss-muted'},t('Last sync: '),format(displayedResult.at)),...warnings(displayedResult.warnings)),
+        state?.lastError&&h('div',{className:'ss-status ss-error'},diagnostic(typeof state.lastError==='string'?state.lastError:state.lastError.message)));
     }
     function apply(ctx) {
       const localeStore = {
@@ -371,7 +463,11 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       };
       const rpc = async (endpoint,payload) => {
         const result = await ctx.connection.rpc.call('/api','strata-sync/'+endpoint,payload);
-        if (!result?.ok) throw new Error(result?.error?.message || 'Strata Sync is not ready.');
+        if (!result?.ok) {
+          const error = new Error(result?.error?.message || 'Strata Sync is not ready.');
+          error.code = result?.error?.code;
+          throw error;
+        }
         return result.value;
       };
       ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({

@@ -17,12 +17,12 @@ const source = fs.readFileSync(new URL('../src/client.js', import.meta.url), 'ut
 
 function status(overrides = {}) {
   return { providerId: 'strata', providers: [{ id: 'strata', apiKey: 'secret-that-must-not-render' }],
-    outputTokens: null, autoSync: false, followLoadedModel: true, busy: false, ...overrides };
+    outputTokens: null, autoSync: false, followLoadedModel: true, busy: false, settingsRevision: 'prefs-1', ...overrides };
 }
 function preview(overrides = {}) {
   return { fingerprint: 'preview-one', busy: false,
     server: { model: { id: 'qwen-local', contextSource: 'slots.n_ctx' }, warnings: [] },
-    budget: { thresholdTokens: 18842, thresholdPercent: 57.5 },
+    budget: { contextWindow:32768,outputTokens:9830,summaryMaxTokens:4096,outputSource:'calculated',thresholdTokens: 18842, thresholdPercent: 57.5 },
     changes: [{ field: 'contextWindow', before: 65536, after: 32768 }, { field: 'headroomTokens', before: 65536, after: 4096 }],
     ...overrides };
 }
@@ -47,12 +47,18 @@ async function mount({ initial = status(), previewResult = preview(), failEndpoi
       calls.push({ channel, name, payload });
       if (name === failEndpoint) return { ok: false, error: { message: 'Connection unavailable' } };
       if (name === 'status') {
+        const response=current;
         if (statusReads++ === 0 && initialStatusGate) await initialStatusGate;
+        return { ok: true, value: response };
+      }
+      if (name === 'configure') {
+        if(payload.expectedRevision!==current.settingsRevision) return {ok:false,error:{code:'stale-settings',message:'Preferences changed.'}};
+        const {expectedRevision,...changes}=payload;
+        current={...current,...changes,settingsRevision:current.settingsRevision+'-saved'};
         return { ok: true, value: current };
       }
-      if (name === 'configure') { current = { ...current, ...payload }; return { ok: true, value: current }; }
       if (name === 'preview') return { ok: true, value: previewResult };
-      if (name === 'apply') return { ok: true, value: { applied: true } };
+      if (name === 'apply') return { ok: true, value: { applied: true, preview:previewResult,backupPath:'profile/backups/test.yml' } };
       throw new Error(`Unexpected endpoint: ${name}`);
     } } },
     effect(callback) { effectDisposers.push(callback()); },
@@ -67,10 +73,15 @@ async function mount({ initial = status(), previewResult = preview(), failEndpoi
   await act(async () => { root.render(React.createElement(component, registration.inject())); });
   return {
     container, calls, intervals, localeListeners,
+    setStatus(value) { current={...current,...value}; },
+    setFailure(value) { failEndpoint=value; },
+    async poll() { await act(async()=>{for(const {callback}of intervals.values())await callback();}); },
     async changeLanguage(value) { await act(async () => { locale=value; for(const fn of localeListeners) fn(); }); },
     button(label) { const button = [...container.querySelectorAll('button')].find(node => node.textContent === label); assert.ok(button, `Missing button ${label}`); return button; },
     async click(button) { await act(async () => { button.click(); }); },
     async setOutput(value) {
+      const auto=container.querySelector('input[aria-label="Follow Strata output limit"]');
+      if(auto?.checked) await act(async()=>{auto.click();});
       const input = container.querySelector('input[type=number]');
       await act(async () => {
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, value);
@@ -128,14 +139,16 @@ test('editing a previewed budget invalidates it and blocks stale apply', async t
   assert.equal(ui.calls.filter(call => call.name === 'apply').length, 0);
 });
 
-test('busy status or a busy preview blocks apply', async t => {
-  for (const options of [{ initial: status({ busy: true }) }, { previewResult: preview({ busy: true }) }]) {
-    const ui = await mount(options); t.after(() => ui.unmount());
-    await ui.click(ui.button('Check differences'));
-    assert.equal(ui.button('Back up and sync').disabled, true);
-    await ui.click(ui.button('Back up and sync'));
-    assert.equal(ui.calls.filter(call => call.name === 'apply').length, 0);
-  }
+test('busy status blocks apply and latest idle status unlocks a busy preview', async t => {
+  const ui=await mount({initial:status({busy:true}),previewResult:preview({busy:true})});t.after(()=>ui.unmount());
+  await ui.click(ui.button('Check differences'));
+  assert.equal(ui.button('Back up and sync').disabled,true);
+  await ui.click(ui.button('Back up and sync'));
+  assert.equal(ui.calls.filter(call=>call.name==='apply').length,0);
+  ui.setStatus({busy:false});await ui.poll();
+  assert.equal(ui.button('Back up and sync').disabled,false);
+  await ui.click(ui.button('Back up and sync'));
+  assert.equal(ui.calls.filter(call=>call.name==='apply').length,1);
 });
 
 test('RPC errors are visible and do not enable apply', async t => {
@@ -162,7 +175,8 @@ test('initial loading disables controls until authoritative preferences arrive',
   }
   assert.equal(ui.calls.length, 1);
   await act(async () => { release(); await gate; });
-  for (const control of ui.container.querySelectorAll('input, select')) assert.equal(control.disabled, false);
+  for (const control of ui.container.querySelectorAll('input:not([type=number]), select')) assert.equal(control.disabled, false);
+  assert.equal(ui.container.querySelector('input[type=number]').disabled,true);
   assert.equal(ui.button('Check differences').disabled, false);
   assert.equal(ui.button('Back up and sync').disabled, true);
 });
@@ -226,4 +240,132 @@ test('output provenance and fallback explanations are available in all three lan
    for(const [i,locale]of ['en','zh-Hant','zh-Hans'].entries()){await changeLanguage(ui,locale);assert.ok(ui.container.textContent.includes(labels[i]));}
    assert.match(ui.container.textContent,/服务器未设置固定输出上限/);
  }
+});
+
+test('untouched forms follow external preference changes without enabling Save',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  await ui.click(ui.button('Check differences'));
+  ui.setStatus({outputTokens:8192,settingsRevision:'prefs-2'});await ui.poll();
+  assert.equal(ui.container.querySelector('input[type=number]').value,'8192');
+  assert.equal(ui.container.querySelector('input[aria-label="Follow Strata output limit"]').checked,false);
+  assert.equal(ui.button('Save preferences').disabled,true);
+  assert.equal(ui.container.querySelector('table'),null);
+  await ui.click(ui.button('Save preferences'));
+  assert.equal(ui.calls.filter(c=>c.name==='configure').length,0);
+});
+
+test('an unselected provider stays untouched when external preferences arrive',async t=>{
+  const ui=await mount({initial:status({providerId:''})});t.after(()=>ui.unmount());
+  assert.equal(ui.container.querySelector('select').value,'');
+  ui.setStatus({outputTokens:8192,settingsRevision:'prefs-2'});await ui.poll();
+  assert.equal(ui.container.querySelector('input[type=number]').value,'8192');
+  assert.doesNotMatch(ui.container.textContent,/Preferences changed in another window/);
+  assert.equal(ui.button('Save preferences').disabled,true);
+});
+
+test('locally edited forms report external conflicts and require explicit reload',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  await ui.setOutput('4096');
+  ui.setStatus({outputTokens:8192,settingsRevision:'prefs-2'});await ui.poll();
+  assert.equal(ui.container.querySelector('input[type=number]').value,'4096');
+  assert.equal(ui.button('Save preferences').disabled,true);
+  assert.equal(ui.button('Check differences').disabled,true);
+  assert.match(ui.container.textContent,/Preferences changed in another window/);
+  await ui.click(ui.button('Reload latest preferences'));
+  assert.equal(ui.container.querySelector('input[type=number]').value,'8192');
+  assert.equal(ui.button('Save preferences').disabled,true);
+  assert.equal(ui.button('Check differences').disabled,false);
+});
+
+test('configure sends only edited fields with the baseline revision and handles unseen conflicts',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  await ui.setOutput('4096');
+  ui.setStatus({autoSync:true,settingsRevision:'prefs-2'});
+  await ui.click(ui.button('Save preferences'));
+  const payload=ui.calls.find(c=>c.name==='configure').payload;
+  assert.equal(payload.expectedRevision,'prefs-1');
+  assert.equal(payload.outputTokens,4096);
+  assert.equal(Object.keys(payload).length,2);
+  assert.match(ui.container.textContent,/Preferences changed in another window/);
+  assert.equal(ui.button('Save preferences').disabled,true);
+  await ui.click(ui.button('Reload latest preferences'));
+  await ui.setOutput('4096');await ui.click(ui.button('Save preferences'));
+  assert.equal(ui.calls.filter(c=>c.name==='configure')[1].payload.expectedRevision,'prefs-2');
+  assert.equal(ui.button('Save preferences').disabled,true);
+});
+
+test('initial status failure recovers on refresh and initializes authoritative preferences',async t=>{
+  const ui=await mount({failEndpoint:'status',initial:status({outputTokens:8192,autoSync:true})});t.after(()=>ui.unmount());
+  assert.match(ui.container.textContent,/Connection unavailable/);
+  assert.equal(ui.button('Check differences').disabled,true);
+  ui.setFailure(undefined);await ui.poll();
+  assert.equal(ui.container.querySelector('input[type=number]').value,'8192');
+  assert.equal(ui.container.querySelector('[role=alert]'),null);
+  assert.equal(ui.button('Check differences').disabled,false);
+  assert.equal(ui.button('Save preferences').disabled,true);
+});
+
+test('automatic output mode is primary and manual override is under Advanced settings',async t=>{
+  const ui=await mount({previewResult:preview({budget:{contextWindow:32768,outputTokens:4096,outputSource:'manual'},server:{model:{id:'qwen',serverOutputTokens:8192,outputLimitStatus:'server'}}})});t.after(()=>ui.unmount());
+  assert.equal(ui.container.querySelector('input[aria-label="Follow Strata output limit"]').checked,true);
+  const input=ui.container.querySelector('input[type=number]');
+  assert.equal(input.disabled,true);assert.equal(input.closest('details').open,false);
+  await ui.setOutput('4096');assert.equal(input.closest('details').open,true);
+  await ui.click(ui.button('Save preferences'));await ui.click(ui.button('Check differences'));
+  assert.match(ui.container.textContent,/Server-provided output limit/);
+  assert.match(ui.container.textContent,/Effective output limit/);
+  assert.match(ui.container.textContent,/8,192/);assert.match(ui.container.textContent,/4,096/);
+  await ui.click(ui.container.querySelector('input[aria-label="Follow Strata output limit"]'));
+  await ui.click(ui.button('Save preferences'));
+  assert.equal(ui.calls.filter(c=>c.name==='configure').at(-1).payload.outputTokens,null);
+});
+
+test('successful sync retains a readonly result including provenance and backup',async t=>{
+  const ui=await mount({previewResult:preview({capabilityStatus:{input:'confirmed',reasoning:'preserved'}})});t.after(()=>ui.unmount());
+  await ui.click(ui.button('Check differences'));await ui.click(ui.button('Back up and sync'));
+  const result=ui.container.querySelector('[data-testid="sync-result"]');
+  assert.ok(result);assert.match(result.textContent,/qwen-local/);assert.match(result.textContent,/32,768/);
+  assert.match(result.textContent,/9,830/);assert.match(result.textContent,/Automatic calculation/);
+  assert.match(result.textContent,/profile\/backups\/test.yml/);assert.match(result.textContent,/Backup created/);
+  assert.equal(result.querySelector('input,button,select'),null);
+  assert.equal(ui.button('Back up and sync').disabled,true);
+  await ui.poll();assert.ok(ui.container.querySelector('[data-testid="sync-result"]'));
+});
+
+test('last synchronization result is restored from status after reopening settings',async t=>{
+  const ui=await mount({initial:status({lastApplied:{at:'2026-10-30T01:00:00Z',modelId:'deepseek',budget:{contextWindow:32768,outputTokens:8192,outputSource:'server'},serverOutputTokens:8192,outputLimitStatus:'server',capabilityStatus:{input:'confirmed',reasoning:'confirmed'},backupPath:'profile/backups/latest.yml'}})});t.after(()=>ui.unmount());
+  const result=ui.container.querySelector('[data-testid="sync-result"]');
+  assert.match(result.textContent,/deepseek/);assert.match(result.textContent,/8,192/);
+  assert.match(result.textContent,/All synchronized settings are confirmed and aligned/);
+});
+
+test('partial alignment lists preserved fields in all locales instead of claiming full alignment',async t=>{
+  const ui=await mount({previewResult:preview({changes:[],capabilityStatus:{input:'confirmed',reasoning:'preserved'}})});t.after(()=>ui.unmount());
+  await ui.click(ui.button('Check differences'));
+  for(const [locale,text]of [['en','Preserved without confirmation: 1 item — Reasoning levels'],['zh-Hant','未能確認，保留原值：1 項 — 推理等級'],['zh-Hans','无法确认，保留原值：1 项 — 推理等级']]){
+    await ui.changeLanguage(locale);
+    assert.ok(ui.container.querySelector('[data-testid="alignment"]').textContent.includes(text));
+  }
+  assert.doesNotMatch(ui.container.textContent,/所有同步项均已确认并对齐/);
+});
+
+test('an older delayed status response cannot replace a newer periodic response',async t=>{
+  let release;const gate=new Promise(resolve=>{release=resolve;});
+  const ui=await mount({initialStatusGate:gate});t.after(()=>ui.unmount());
+  ui.setStatus({outputTokens:8192,settingsRevision:'prefs-new'});await ui.poll();
+  assert.equal(ui.container.querySelector('input[type=number]').value,'8192');
+  await act(async()=>{release();await gate;});
+  assert.equal(ui.container.querySelector('input[type=number]').value,'8192');
+  await ui.setOutput('4096');await ui.click(ui.button('Save preferences'));
+  assert.equal(ui.calls.find(c=>c.name==='configure').payload.expectedRevision,'prefs-new');
+});
+
+test('newer sync results from another window replace the local result on refresh',async t=>{
+  const ui=await mount();t.after(()=>ui.unmount());
+  await ui.click(ui.button('Check differences'));await ui.click(ui.button('Back up and sync'));
+  ui.setStatus({lastApplied:{at:'2099-01-01T00:00:00Z',modelId:'newer-model',budget:{contextWindow:65536,outputTokens:16384,outputSource:'server'},capabilityStatus:{input:'confirmed',reasoning:'confirmed'},backupPath:'newer.yml'}});
+  await ui.poll();
+  const result=ui.container.querySelector('[data-testid="sync-result"]');
+  assert.match(result.textContent,/newer-model/);assert.match(result.textContent,/65,536/);assert.match(result.textContent,/newer.yml/);
+  assert.doesNotMatch(result.textContent,/qwen-local/);
 });

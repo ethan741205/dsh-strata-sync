@@ -8,7 +8,7 @@ The selected `/v1/models` row must explicitly report `architecture.input_modalit
 
 ## Reasoning choices
 
-The optional, authenticated `GET /props?model=...` response must identify Strata in `build_info`, match the selected model in `model_alias`, and return a reviewed `chat_template`. The SHA-256 fingerprint is calculated after CRLF-to-LF normalization. Names, quantization labels, and a template merely mentioning reasoning are insufficient. Only matching fingerprints enable automatic reasoning synchronization.
+The optional, authenticated `GET /props?model=...` response must identify Strata in `build_info`, match the selected canonical model or one of its validated loaded aliases in `model_alias`, and return a reviewed `chat_template`. Aliases must resolve through `alias_of` to that loaded canonical text model. An alias belonging to another model is not accepted. The SHA-256 fingerprint is calculated after CRLF-to-LF normalization. Names, quantization labels, and a template merely mentioning reasoning are insufficient. Only matching fingerprints enable automatic reasoning synchronization.
 
 | Reviewed template | SHA-256 | DSH selection → template value |
 |---|---|---|
