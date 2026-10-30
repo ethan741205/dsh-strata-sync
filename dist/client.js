@@ -218,8 +218,8 @@ window.__ModuleLoader__.load({
     "zh-Hans": "未设置"
   },
   "Automatic compaction is disabled in an affected Agent preset. Sync preserves that choice.": {
-    "zh-Hant": "受影響的 Agent 範本已停用自動壓縮，同步會保留此選擇。",
-    "zh-Hans": "受影响的 Agent 预设已停用自动压缩，同步会保留此选择。"
+    "zh-Hant": "受影響的 Agent 配置已停用自動壓縮，同步會保留此選擇。",
+    "zh-Hans": "受影响的 Agent 配置已停用自动压缩，同步会保留此选择。"
   },
   "Live slots do not report a context size. Using the model context reported by Strata.": {
     "zh-Hant": "執行中的 slot 未提供上下文大小，將使用 Strata 模型資訊。",
@@ -313,21 +313,13 @@ window.__ModuleLoader__.load({
     "zh-Hant": "上下文 tokens",
     "zh-Hans": "上下文 tokens"
   },
-  "Context source: ": {
-    "zh-Hant": "上下文來源：",
-    "zh-Hans": "上下文来源："
-  },
-  "Server model metadata": {
-    "zh-Hant": "伺服器模型資訊",
-    "zh-Hans": "服务器模型信息"
-  },
   "Affected presets: ": {
-    "zh-Hant": "受影響的範本：",
-    "zh-Hans": "受影响的预设："
+    "zh-Hant": "受影響的配置：",
+    "zh-Hans": "受影响的配置："
   },
-  ". Existing conversations retain their preset revision. Start a new conversation to use the updated compaction budget.": {
-    "zh-Hant": "。既有對話保留原範本版本，請開新對話套用更新的壓縮預算。",
-    "zh-Hans": "。已有对话保留原预设版本，请开启新对话应用更新的压缩预算。"
+  ". The updated compaction budget applies only to new conversations.": {
+    "zh-Hant": "。新的壓縮預算僅對新對話生效。",
+    "zh-Hans": "。新的压缩预算仅对新对话生效。"
   },
   "Setting": {
     "zh-Hant": "設定",
@@ -581,8 +573,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           h('p',{'data-testid':'reasoning-levels'},t('Reasoning levels'),': ',preview.capabilityEdits?.reasoningEfforts?Object.keys(preview.capabilityEdits.reasoningEfforts).join(' / '):t('Unconfirmed — keep current setting')),
           preview.capabilityEdits?.reasoningEfforts&&h('p',{className:'ss-muted'},t('Verified template: '),preview.server?.model?.capabilities?.reasoning?.family),
           h('p',{className:'ss-muted'},t('Only verified capabilities are synchronized. Unknown fields keep their existing values. Reasoning choices do not change the selected effort.')),
-          h('p',{className:'ss-muted'},t('Context source: '),preview.server?.model?.contextSource||t('Server model metadata')),
-          preview.presetIds?.length>0&&h('p',{className:'ss-muted'},t('Affected presets: '),preview.presetIds.join(', '),t('. Existing conversations retain their preset revision. Start a new conversation to use the updated compaction budget.')),
+          preview.presetIds?.length>0&&h('p',{className:'ss-muted'},t('Affected presets: '),preview.presetIds.join(', '),t('. The updated compaction budget applies only to new conversations.')),
           ...warnings(preview.server?.warnings),
           preview.changes?.length>0&&h('div',{className:'ss-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',{scope:'col'},t('Setting')),h('th',{scope:'col'},t('Current')),h('th',{scope:'col'},t('After sync')))),
             h('tbody',null,...preview.changes.map(c=>h('tr',{key:(c.target||'')+c.field},h('th',{scope:'row'},t(labels[c.field]||c.field),c.target&&h('span',{className:'ss-target',title:c.target},c.target)),h('td',{className:'ss-before','data-label':t('Current')},renderValue(c.field,c.before)),h('td',{className:'ss-after','data-label':t('After sync')},renderValue(c.field,c.after))))))),

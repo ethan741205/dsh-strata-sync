@@ -136,7 +136,7 @@ test('native module loader registers an English Settings section without display
   assert.ok(!details.container.innerHTML.includes('secret-that-must-not-render'));
   await details.click(details.button('Check differences'));
   assert.match(details.container.textContent, /qwen-local/);
-  assert.match(details.container.textContent, /slots.n_ctx/);
+  assert.doesNotMatch(details.container.textContent, /slots\.n_ctx|Context source:/);
   assert.match(details.container.textContent, /57\.50/);
   assert.equal(details.container.querySelectorAll('tbody tr').length, 2);
   assert.match(details.container.textContent, /Choose an existing provider/);
@@ -563,8 +563,8 @@ test('initial loading disables controls until authoritative preferences arrive',
 
 async function changeLanguage(ui, value) { await ui.changeLanguage(value); }
 
-test('Chinese locales translate previews and notices without changing synchronization preferences', async t => {
-  const ui = await mount({ previewResult: preview({ server: { model: { id: 'qwen-local' }, warnings: ['SLOTS_CONTEXT_UNAVAILABLE'] } }) });
+test('all locales translate previews and configuration notices without changing synchronization preferences', async t => {
+  const ui = await mount({ previewResult: preview({ presetIds: ['standard','ptc','minimal','cordis'], server: { model: { id: 'qwen-local' }, warnings: ['SLOTS_CONTEXT_UNAVAILABLE','DSH_AUTO_COMPACTION_DISABLED'] } }) });
   t.after(() => ui.unmount());
   const initialCalls = ui.calls.length;
   await changeLanguage(ui, 'zh-Hant');
@@ -572,9 +572,19 @@ test('Chinese locales translate previews and notices without changing synchroniz
   await ui.click(ui.button('檢查差異'));
   assert.match(ui.container.textContent, /上下文視窗/);
   assert.match(ui.container.textContent, /執行中的 slot 未提供上下文大小/);
+  assert.ok(ui.container.textContent.includes('受影響的配置：standard, ptc, minimal, cordis。新的壓縮預算僅對新對話生效。'));
+  assert.match(ui.container.textContent, /Agent 配置已停用自動壓縮/);
   await changeLanguage(ui, 'zh-Hans');
   assert.match(ui.container.textContent, /上下文窗口/);
   assert.match(ui.container.textContent, /运行中的 slot 未提供上下文大小/);
+  assert.ok(ui.container.textContent.includes('受影响的配置：standard, ptc, minimal, cordis。新的压缩预算仅对新对话生效。'));
+  assert.match(ui.container.textContent, /Agent 配置已停用自动压缩/);
+  assert.doesNotMatch(ui.container.textContent, /受影响的预设|原预设版本/);
+  await changeLanguage(ui, 'en');
+  assert.ok(ui.container.textContent.includes('Affected presets: standard, ptc, minimal, cordis. The updated compaction budget applies only to new conversations.'));
+  assert.match(ui.container.textContent, /affected Agent preset/);
+  assert.doesNotMatch(ui.container.textContent, /affected Agent configuration|cordis configurations/);
+  await changeLanguage(ui, 'zh-Hans');
   assert.equal(ui.calls.filter(c => c.name === 'configure' || c.name === 'apply').length, 0);
   await ui.click(ui.button('备份并同步'));
   assert.match(ui.container.textContent, /已同步并备份/);

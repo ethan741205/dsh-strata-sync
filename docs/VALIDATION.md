@@ -1,6 +1,6 @@
 # Validation
 
-Validation date: 2026-10-30 (Asia/Taipei).
+Validation date: 2026-10-31 (Asia/Taipei).
 
 ## Current summary behavior
 
@@ -13,7 +13,9 @@ Validation date: 2026-10-30 (Asia/Taipei).
 
 ## Automated verification
 
-Version **0.12.4 passed 209 automated tests** plus package verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
+Version **0.12.5 passed 209 automated tests** plus package verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
+
+- Preview copy omits the technical context-source label and explains that updated compaction budgets apply only to new conversations. Chinese interfaces call affected Agent presets configurations; English retains the native preset terminology. All three translations are checked without changing synchronization preferences.
 
 - Optional `after-truncation` mode: untouched first request, exact native `max-tokens` finish detection, guidance on subsequent native attempts, and reset only after a matching `compaction/summary` followed by an error-free `compaction/end`. Completed `stop` or text-bearing `tool-calls` streams can become commit candidates; a finish alone cannot reset recovery. Failed native checkpoint validation leaves it armed.
 - Session/provider/model isolation, bounded in-memory recovery state, missing event identities, unmatched commits, late completion races, native cancellation, early iterator closure, duplicate hooks and disposal. Tests use the real Cordis waterfall and synthetic model responses; no live inference is dispatched.
