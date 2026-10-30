@@ -13,19 +13,21 @@ Validation date: 2026-10-31 (Asia/Taipei).
 
 ## Automated verification
 
-Version **0.12.5 passed 209 automated tests** plus package verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
+Version **0.12.6 passed 206 automated tests** plus package verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
+
+- The main preview omits the estimated summary-target card, while retaining summary output limits and all guidance controls. The aligned model-status card no longer repeats the existing-conversation policy reminder. These presentation changes leave runtime summary calculations and model/compaction settings unchanged.
 
 - Preview copy omits the technical context-source label and explains that updated compaction budgets apply only to new conversations. Chinese interfaces call affected Agent presets configurations; English retains the native preset terminology. All three translations are checked without changing synchronization preferences.
 
 - Optional `after-truncation` mode: untouched first request, exact native `max-tokens` finish detection, guidance on subsequent native attempts, and reset only after a matching `compaction/summary` followed by an error-free `compaction/end`. Completed `stop` or text-bearing `tool-calls` streams can become commit candidates; a finish alone cannot reset recovery. Failed native checkpoint validation leaves it armed.
 - Session/provider/model isolation, bounded in-memory recovery state, missing event identities, unmatched commits, late completion races, native cancellation, early iterator closure, duplicate hooks and disposal. Tests use the real Cordis waterfall and synthetic model responses; no live inference is dispatched.
-- Mode defaults and validation, preference backup/persistence/reload, stale-edit protection, three-language selection/help and recovery-only preview labels. Model/context budgets remain unchanged when saving the mode.
+- Mode defaults and validation, preference backup/persistence/reload, stale-edit protection and three-language selection/help. Model/context budgets remain unchanged when saving the mode.
 
 - Initial monitoring is scheduled immediately after plugin activation yields, outside the HMR transaction. Tests cover read-only startup, disposal before execution, hot reload, short deferral during configuration writes, ordinary recovery intervals after failure, and avoiding duplicate reads after manual checks or startup synchronization.
 
 - Subsequent runtime monitoring on a separate 60-second timer, including while Settings is closed and Agent tasks run. It makes metadata GET requests only: no configuration writes, backups, preset activation or inference. Startup synchronization still runs once.
 - Loaded-model switches, context/output changes, manual acknowledgement of an already configured model, explicit synchronization, transient failure/recovery, incomplete metadata, cancellation, overlapping checks, hot reload, concurrent edits and late responses. Failed or mixed metadata cannot produce a live aligned status.
-- Three-language runtime warnings and recovery, historical-success suppression, main-preview conversation/headroom/summary/retention budgets, effective threshold and formula, summary target ceilings and default-enabled recovery/native fallback states.
+- Three-language runtime warnings and recovery, historical-success suppression, main-preview conversation/headroom/summary/retention budgets, effective threshold and formula, absence of summary estimates and default-enabled guidance controls.
 
 - Current DeepSeek recognition accepts the `Strata ds4-0.1` build format and the reviewed served-template fingerprint. Unknown/malformed identities, wrong model aliases and unreviewed templates remain unconfirmed. Both legacy DeepSeek choices and the new `medium` choice are covered.
 - The prior authenticated metadata-only compatibility check against DeepSeek Huihui 2.00 bpw confirmed 65,536 context, unlimited server output, a 19,660-token fallback, text/image input and `off / low / medium / high / max`, without warnings or configuration changes. No inference request was sent.
@@ -38,7 +40,7 @@ Version **0.12.5 passed 209 automated tests** plus package verification. Unspeci
 - Verified model discovery, selected-provider/loaded-model matching, alias validation, input types, model-specific reasoning choices and thirteen mocked SDK wire cases. Off sends false thinking flags and omits the effort; other choices send true and their exact native effort name. These cases validate request mapping, not generated-answer quality.
 - Preference validation, synchronization write guards, stale-preview rejection, concurrent edits, backup and rollback, startup synchronization, hot reload and enabled Agent preset policies.
 - Synchronization during suspended generation and summary streams, including maintenance status, uses synthetic responses with a mocked ConfigEditor. Requests complete unchanged; simultaneous sync is rejected, new steps wait during writes, and both success and rollback release the barrier. These tests do not exercise a live desktop task or native ConfigEditor reload during a real model stream.
-- Three-language settings rendering, editable prompt preservation, custom divisors, preview ceilings, default-enabled guidance with explicit-disable preservation and preference conflicts.
+- Three-language settings rendering, editable prompt preservation, custom divisors, default-enabled guidance with explicit-disable preservation and preference conflicts.
 
 The package verifier checks the public file list, English root README selection, translated documentation links, entry points, source/build consistency and publishing metadata. It excludes private configuration, user conversations, credentials, backups and the native-prompt test fixture from the public package.
 

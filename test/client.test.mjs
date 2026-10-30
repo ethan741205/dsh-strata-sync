@@ -179,9 +179,7 @@ test('omitted summary guidance defaults on in recovery mode in all locales witho
       assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').checked,true);
       assert.equal(ui.container.querySelector('[data-testid="summary-guidance-mode"]').value,'after-truncation');
       await ui.click(ui.button(locale==='en'?'Check differences':locale==='zh-Hans'?'检查差异':'檢查差異'));
-      assert.ok(ui.container.querySelector('[data-testid="summary-target-ceiling"]'));
-      assert.equal(ui.container.querySelector('[data-testid="summary-guidance-off"]'),null);
-      assert.ok(ui.container.querySelector('[data-testid="summary-recovery-preview"]'));
+      assert.equal(ui.container.querySelector('[data-testid="preview-summary-target"]'),null);
       assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
     } finally { await ui.unmount(); }
   }
@@ -203,7 +201,7 @@ test('explicitly enabled summary guidance uses two 50% bounds and preview does n
   assert.equal(card.querySelector('details').open,false);
   await ui.click(ui.button('Check differences'));
   assert.equal(card.querySelector('[data-testid="summary-target-ceiling"]'),null);
-  assert.match(ui.container.querySelector('[data-testid="sync-preview"] [data-testid="summary-target-ceiling"]').textContent,/2,048 tokens/);
+  assert.equal(ui.container.querySelector('[data-testid="preview-summary-target"]'),null);
   assert.match(card.textContent,/Target = floor\(min\(estimated effective output budget \/ O/);
   assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
   assert.ok(ui.calls.every(c=>['status','preview'].includes(c.name)));
@@ -233,7 +231,7 @@ test('summary recovery mode is opt-in, persists independently and has localized 
     assert.equal(mode.getAttribute('aria-label'),label);
     assert.equal(mode.selectedOptions[0].textContent,choice);
     assert.ok(ui.container.querySelector('[data-testid="summary-mode-help"]').textContent.includes(help));
-    assert.ok(ui.container.querySelector('[data-testid="summary-recovery-preview"]'));
+    assert.equal(ui.container.querySelector('[data-testid="preview-summary-target"]'),null);
   }
   await ui.changeLanguage('en');
   await ui.click(ui.container.querySelector('[data-testid="summary-guidance-toggle"]'));
@@ -258,14 +256,6 @@ test('summary mode polling preserves unsaved edits and detects external mode con
   assert.equal(mode.value,'after-truncation');
 });
 
-test('summary preview ceiling follows context and summary cap without claiming the actual target', async t => {
-  const ui=await mount({previewResult:preview({budget:{contextWindow:65536,summaryMaxTokens:4096}})});t.after(()=>ui.unmount());
-  await ui.click(ui.button('Check differences'));
-  const card=ui.container.querySelector('[data-testid="preview-summary-target"]');
-  assert.match(card.querySelector('[data-testid="summary-target-ceiling"]').textContent,/2,048 tokens/);
-  assert.match(card.textContent,/Maximum target for this preview/);
-});
-
 test('summary controls save only changed preferences with their revision and persist off state',async t=>{
   const ui=await mount();t.after(()=>ui.unmount());
   await ui.click(ui.container.querySelector('[data-testid="summary-guidance-toggle"]'));
@@ -280,34 +270,20 @@ test('summary controls save only changed preferences with their revision and per
   assert.equal(ui.container.querySelector('[data-testid="summary-output-divisor"]').value,'32');
   await ui.click(ui.button('Check differences'));
   assert.equal(ui.container.querySelector('[data-testid="summary-target-ceiling"]'),null);
-  assert.ok(ui.container.querySelector('[data-testid="preview-summary-target"] [data-testid="summary-guidance-off"]'));
+  assert.equal(ui.container.querySelector('[data-testid="preview-summary-target"]'),null);
   assert.equal(ui.calls.some(call=>call.name==='apply'),false);
 });
 
-test('saved divisor changes the preview while the summary output bound still applies',async t=>{
+test('saved divisors remain editable without displaying a target estimate',async t=>{
   const ui=await mount();t.after(()=>ui.unmount());
-  for(const [divisor,ceiling]of [['4','1,024'],['2','2,048'],['1','4,096']]){
+  for(const divisor of ['4','2','1']){
     await ui.setDivisor(divisor);
     await ui.click(ui.button('Save preferences'));
     await ui.click(ui.button('Check differences'));
-    assert.match(ui.container.querySelector('[data-testid="summary-target-ceiling"]').textContent,new RegExp(ceiling+' tokens'));
+    assert.equal(ui.container.querySelector('[data-testid="summary-output-divisor"]').value,divisor);
+    assert.equal(ui.container.querySelector('[data-testid="preview-summary-target"]'),null);
   }
   assert.equal(ui.calls.filter(call=>call.name==='configure').length,3);
-});
-
-test('preview below the summary target minimum shows native fallback in all locales',async t=>{
-  const ui=await mount();t.after(()=>ui.unmount());
-  await ui.setDivisor('256');
-  await ui.click(ui.button('Save preferences'));
-  await ui.click(ui.button('Check differences'));
-  for(const [locale,message]of [
-    ['en','The native summary prompt remains unchanged.'],
-    ['zh-Hant','將保留原生摘要提示詞'],
-    ['zh-Hans','将保留原生摘要提示词']]){
-    await ui.changeLanguage(locale);
-    assert.equal(ui.container.querySelector('[data-testid="summary-target-ceiling"]'),null);
-    assert.ok(ui.container.querySelector('[data-testid="summary-target-native"]').textContent.includes(message));
-  }
 });
 
 test('invalid divisors produce local errors and cannot be saved or sent to preview',async t=>{
@@ -365,25 +341,16 @@ test('summary guidance follows DSH Chinese locales without changing preferences'
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.match(card.textContent,/动态摘要目标/);
   assert.match(card.textContent,/附加于 DSH 原生提示词/);
-  assert.match(ui.container.querySelector('[data-testid="preview-summary-target"]').textContent,/本次预览的目标上限：2,048 tokens/);
+  assert.equal(ui.container.querySelector('[data-testid="preview-summary-target"]'),null);
   assert.match(card.textContent,/无法应用时，沿用 DSH 原生摘要/);
   assert.equal(card.querySelector('[data-testid="summary-details"]').querySelectorAll('p').length,2);
   await ui.changeLanguage('zh-Hant');
   assert.match(card.textContent,/動態摘要目標/);
   assert.match(card.textContent,/附加於 DSH 原生提示詞/);
-  assert.match(ui.container.querySelector('[data-testid="preview-summary-target"]').textContent,/本次預覽的目標上限：2,048 tokens/);
+  assert.equal(ui.container.querySelector('[data-testid="preview-summary-target"]'),null);
   assert.match(card.textContent,/無法套用時，沿用 DSH 原生摘要/);
   assert.equal(card.querySelector('[data-testid="summary-details"]').querySelectorAll('p').length,2);
   assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
-});
-
-test('summary preview omits a numeric ceiling when its inputs are unavailable', async t => {
-  const ui=await mount({previewResult:preview({budget:{summaryMaxTokens:4096}})});t.after(()=>ui.unmount());
-  await ui.click(ui.button('Check differences'));
-  const card=ui.container.querySelector('[data-testid="summary-target"]');
-  assert.equal(card.querySelector('[data-testid="summary-target-ceiling"]'),null);
-  assert.match(card.textContent,/DSH keeps its native summary behavior/);
-  assert.doesNotMatch(card.textContent,/NaN|undefined|Infinity/);
 });
 
 test('compact summary card displays the exact editable prompt and hides detailed explanations',async t=>{
@@ -465,7 +432,7 @@ test('custom prompts participate in external preference conflicts',async t=>{
   assert.equal(ui.container.querySelector('[data-testid="summary-prompt"]').value,'New external {target}.');
 });
 
-test('both divisors accept decimals and the preview uses the custom output divisor',async t=>{
+test('both divisors accept and preserve decimals after preview',async t=>{
   const ui=await mount();t.after(()=>ui.unmount());
   const pairs=[['summary-output-divisor','1.5'],['summary-source-divisor','2.5']];
   for(const [id,value]of pairs){
@@ -478,7 +445,7 @@ test('both divisors accept decimals and the preview uses the custom output divis
     summaryOutputDivisor:1.5,summarySourceDivisor:2.5,expectedRevision:'prefs-1',
   });
   await ui.click(ui.button('Check differences'));
-  assert.match(ui.container.querySelector('[data-testid="summary-target-ceiling"]').textContent,/2,730 tokens/);
+  assert.equal(ui.container.querySelector('[data-testid="summary-output-divisor"]').value,'1.5');
   assert.equal(ui.container.querySelector('[data-testid="summary-source-divisor"]').value,'2.5');
   for(const id of ['summary-output-divisor','summary-source-divisor']){
     await ui.setDivisor('0.5',id);
@@ -818,7 +785,7 @@ test('runtime warnings suppress historical success claims and preserve unsaved p
   assert.ok(ui.calls.every(call=>call.name==='status'));
 });
 
-test('main change preview always exposes calculated compaction budget and estimated summary target',async t=>{
+test('main preview keeps compaction budgets without summary estimates in every locale',async t=>{
   const ui=await mount({previewResult:preview({changes:[]})});t.after(()=>ui.unmount());
   await ui.click(ui.button('Check differences'));
   const card=ui.container.querySelector('[data-testid="sync-preview"]');
@@ -829,18 +796,16 @@ test('main change preview always exposes calculated compaction budget and estima
   }
   assert.match(budget.textContent,/57\.50%/);
   assert.match(budget.textContent,/Trigger = min\(80% of context, conversation budget − headroom\)/);
-  const target=card.querySelector('[data-testid="preview-summary-target"]');
-  assert.equal(target.closest('details'),null);
-  assert.match(target.textContent,/2,048 tokens \(4,096 ÷ 2\)/);
-  assert.match(target.textContent,/actual target is also limited by available context and source length/);
-  assert.equal(ui.container.querySelectorAll('[data-testid="summary-target-ceiling"]').length,1);
+  assert.equal(card.querySelector('[data-testid="preview-summary-target"]'),null);
+  assert.ok(ui.container.querySelector('[data-testid="summary-guidance-toggle"]'));
+  assert.equal(ui.container.querySelector('[data-testid="summary-prompt"]').value,DEFAULT_SUMMARY_TEMPLATE);
   assert.ok(card.querySelector('[data-testid="alignment"]'));
   ui.setStatus({liveCheck:{state:'unavailable',checkedAt:'2026-10-30T05:01:00Z'}});await ui.poll();
   assert.equal(card.querySelector('[data-testid="alignment"]'),null);
-  for(const [locale,budgetTitle,targetTitle]of [['zh-Hans','压缩预算','摘要目标（估计）'],['zh-Hant','壓縮預算','摘要目標（估計）']]) {
-    await ui.changeLanguage(locale);assert.ok(budget.textContent.includes(budgetTitle));assert.ok(target.textContent.includes(targetTitle));
+  for(const [locale,budgetTitle]of [['zh-Hans','压缩预算'],['zh-Hant','壓縮預算']]) {
+    await ui.changeLanguage(locale);assert.ok(budget.textContent.includes(budgetTitle));
     assert.doesNotMatch(budget.textContent,/Conversation budget|Trigger =/);
-    assert.doesNotMatch(target.textContent,/Preview ceiling|Summary target/);
+    assert.equal(card.querySelector('[data-testid="preview-summary-target"]'),null);
   }
   assert.ok(ui.calls.every(call=>['status','preview'].includes(call.name)));
 });

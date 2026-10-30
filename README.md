@@ -56,7 +56,7 @@ Open **Settings → dsh-strata-sync**:
 
 The main flow appears first: **Check differences → Review changes → Back up and sync**. **Sync preferences** and the optional **Dynamic summary target** are collapsed below it; expand them to adjust options or edit the supplemental prompt.
 
-The change preview shows the conversation budget, compaction headroom, summary output cap, effective compaction trigger and recent-content retention. It also shows the estimated summary target ceiling when summary guidance is enabled, or marks it as disabled. The formulas explain how the proposed budgets were calculated.
+The change preview shows the conversation budget, compaction headroom, summary output cap, effective compaction trigger and recent-content retention. The formulas explain how the proposed budgets were calculated.
 
 1. Select your Strata provider and click **Save preferences**.
 2. Click **Check differences** to inspect the loaded model and proposed changes.
@@ -123,7 +123,7 @@ The target is the smaller result, rounded down. All divisors accept decimals of 
 
 The effective output budget is an **estimate**, not the raw requested `maxTokens` or a server-confirmed cap. It is the smaller of the request's summary cap and estimated remaining context. The latter uses the smaller verified server/client window, subtracts the full prompt (including system text, tool schemas and the supplement), and allows for the supported pi-ai adapter's 4,096-token safety reserve. Text is estimated at 3.5 characters/token with extra framing. The separate source estimate uses DSH's four-character heuristic and excludes the system prompt, tools and summary instruction. Neither estimate is an exact tokenizer count.
 
-For example, a 4,096-token effective output budget with enough source content gives a **2,048-token target** in either 32K or 64K context. A 2,000-token source instead gives a **1,000-token target**. Less remaining context can reduce the target further. The main change preview shows an upper bound from the proposed summary cap divided by O; actual targets also account for remaining context and source length, so they may be lower.
+For example, a 4,096-token effective output budget with enough source content gives a **2,048-token target** in either 32K or 64K context. A 2,000-token source instead gives a **1,000-token target**. Less remaining context can reduce the target further. The target is calculated for each supported summary request; the change preview does not display a target estimate.
 
 This is a writing instruction, **not a hard output limit or a guarantee against truncation**. Reasoning may consume the same output budget; the plugin does not change reasoning, `maxTokens`, `fit_max_tokens` or compaction timing. The server's actual tokenizer, later middleware, or a different adapter version may impose a lower limit.
 

@@ -92,7 +92,6 @@ window.__ModuleLoader__.load({
   "After summary truncation": {"zh-Hant":"摘要截斷後","zh-Hans":"摘要截断后"},
   "The first summary uses native instructions. If it hits the output limit, subsequent native summaries in the same conversation use guidance until a compaction succeeds. No extra retry is started.": {"zh-Hant":"首次使用原生摘要指令。若達到輸出上限，同一對話後續的原生摘要嘗試會加入長度指引，成功後恢復原生方式。不會額外啟動重試。","zh-Hans":"首次使用原生摘要指令。若达到输出上限，同一对话后续的原生摘要尝试会加入长度指引，成功后恢复原生方式。不会额外启动重试。"},
   "Guidance is added to every supported summary, including the first attempt.": {"zh-Hant":"每次支援的摘要都加入長度指引，包括首次嘗試。","zh-Hans":"每次支持的摘要都加入长度指引，包括首次尝试。"},
-  "This target applies only during recovery after a truncated summary.": {"zh-Hant":"此目標只在摘要截斷後的恢復階段使用。","zh-Hans":"此目标只在摘要截断后的恢复阶段使用。"},
   "Supplemental summary prompt": {
     "zh-Hant": "摘要補充提示詞",
     "zh-Hans": "摘要补充提示词"
@@ -153,25 +152,13 @@ window.__ModuleLoader__.load({
     "zh-Hant": "請輸入大於或等於 1 的有限除數，可使用小數。",
     "zh-Hans": "请输入大于或等于 1 的有限除数，可使用小数。"
   },
-  "This preview is below the 256-token minimum. The native summary prompt remains unchanged.": {
-    "zh-Hant": "本次預覽低於 256 tokens 的最低目標，將保留原生摘要提示詞。",
-    "zh-Hans": "本次预览低于 256 tokens 的最低目标，将保留原生摘要提示词。"
-  },
   "Save preferences to apply these controls to subsequent summary requests; other model and compaction settings stay unchanged.": {
     "zh-Hant": "儲存偏好後，這些控制項會套用至後續摘要請求；其他模型與壓縮設定保持不變。",
     "zh-Hans": "保存偏好后，这些控制项将应用于后续摘要请求；其他模型与压缩设置保持不变。"
   },
-  "The preview uses the proposed summary cap. Actual targets also account for the estimated remaining context and source length; they may be lower.": {
-    "zh-Hant": "預覽採用提議的摘要上限。實際目標還會考慮估算的上下文剩餘空間與原文長度，可能更低。",
-    "zh-Hans": "预览采用提议的摘要上限。实际目标还会考虑估算的上下文剩余空间与原文长度，可能更低。"
-  },
   "The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.": {
     "zh-Hant": "保留原生提示詞、輸出硬上限與其他設定。這是寫作目標，不保證實際長度，也不代表最佳值。",
     "zh-Hans": "保留原生提示词、输出硬上限与其他设置。这是写作目标，不保证实际长度，也不代表最佳值。"
-  },
-  "Maximum target for this preview: ": {
-    "zh-Hant": "本次預覽的目標上限：",
-    "zh-Hans": "本次预览的目标上限："
   },
   "The actual target may be lower for shorter content. System prompts and tool schemas are excluded from the content estimate.": {
     "zh-Hant": "內容較短時，實際目標會更低；內容估算不包含系統提示詞與工具定義。",
@@ -370,7 +357,6 @@ window.__ModuleLoader__.load({
       'Waiting for the first server check.': {'zh-Hant':'等待首次伺服器檢查。','zh-Hans':'等待首次服务器检查。'},
       'Select a Strata provider to enable model checks.': {'zh-Hant':'選擇 Strata 供應者以啟用模型檢查。','zh-Hans':'选择 Strata 提供方以启用模型检查。'},
       'Check differences, sync, then start a new conversation. Existing conversations keep their previous settings.': {'zh-Hant':'請檢查差異、同步後開啟新對話；既有對話仍保留先前設定。','zh-Hans':'请检查差异、同步后开启新对话；现有对话仍保留之前的设置。'},
-      'Existing conversations may still use an earlier compaction policy.': {'zh-Hant':'既有對話可能仍使用先前的壓縮政策。','zh-Hans':'现有对话可能仍使用之前的压缩策略。'},
       'Previous sync results may be outdated. Check the server connection and try Check differences.': {'zh-Hant':'先前同步結果可能已過時。請確認伺服器連線，再點「檢查差異」。','zh-Hans':'之前的同步结果可能已过时。请确认服务器连接，再点击“检查差异”。'},
       'Checks on plugin activation, then every 60 seconds, even with Settings closed. No automatic changes or inference requests.': {'zh-Hant':'外掛啟用時即檢查，之後每 60 秒檢查一次，關閉設定頁後仍會檢查；不自動改設定或發送推論請求。','zh-Hans':'插件启用时即检查，之后每 60 秒检查一次，关闭设置页后仍会检查；不自动改设置或发送推理请求。'},
       'Last checked: ': {'zh-Hant':'最近檢查：','zh-Hans':'最近检查：'},
@@ -378,9 +364,6 @@ window.__ModuleLoader__.load({
       'Compaction budget': {'zh-Hant':'壓縮預算','zh-Hans':'压缩预算'},
       'Conversation budget': {'zh-Hant':'對話預算','zh-Hans':'对话预算'},
       'Conversation budget = context − response output. Trigger = min(80% of context, conversation budget − headroom). Retain 16% of the conversation budget.': {'zh-Hant':'對話預算 = 上下文 − 回覆輸出。觸發門檻 = min(上下文的 80%, 對話預算 − 壓縮餘裕)。保留對話預算的 16%。','zh-Hans':'对话预算 = 上下文 − 回复输出。触发门槛 = min(上下文的 80%, 对话预算 − 压缩余量)。保留对话预算的 16%。'},
-      'Summary target (estimate)': {'zh-Hant':'摘要目標（估計）','zh-Hans':'摘要目标（估计）'},
-      'Disabled — native summary instructions are used.': {'zh-Hant':'未啟用 — 使用原生摘要指令。','zh-Hans':'未启用 — 使用原生摘要指令。'},
-      'Preview ceiling = summary output limit ÷ output divisor, rounded down. The actual target is also limited by available context and source length.': {'zh-Hant':'預覽目標上限 = 摘要輸出上限 ÷ 輸出除數，向下取整。實際目標也受可用上下文與原文長度限制。','zh-Hans':'预览目标上限 = 摘要输出上限 ÷ 输出除数，向下取整。实际目标也受可用上下文与原文长度限制。'},
       'Sync the model and context budgets from Strata Server to DSH.': {'zh-Hant':'將 Strata Server 的模型與上下文預算同步至 DSH。','zh-Hans':'将 Strata Server 的模型与上下文预算同步到 DSH。'},
       'Start here': {'zh-Hant':'從這裡開始','zh-Hans':'从这里开始'},
       'First, check differences to read the loaded model and preview the changes.': {'zh-Hant':'先點「檢查差異」，讀取目前載入的模型並預覽變更。','zh-Hans':'先点击“检查差异”，读取当前加载的模型并预览更改。'},
@@ -508,8 +491,6 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       const liveWarning=liveCheck?.state==='mismatch'||liveCheck?.state==='unavailable';
       const liveTitle={unchecked:'Waiting for the first server check.',unconfigured:'Select a Strata provider to enable model checks.',aligned:'Current model settings are aligned.',mismatch:'Strata model or settings changed.',unavailable:'Unable to verify the current server model.'}[liveCheck?.state];
       const activeBudget=preview?.budget;
-      const summaryTargetCeiling=form.summaryGuidance&&validDivisor&&Number.isSafeInteger(activeBudget?.contextWindow)&&activeBudget.contextWindow>0&&Number.isSafeInteger(activeBudget?.summaryMaxTokens)&&activeBudget.summaryMaxTokens>0
-        ? Math.floor(activeBudget.summaryMaxTokens/draft.summaryOutputDivisor) : null;
       const outputSource=(budget)=>t(({server:'Strata Server default',manual:'Manual override',calculated:'Automatic calculation'})[budget?.outputSource]||'Automatic calculation');
       const preserved=(view)=>{
         const status=view?.capabilityStatus;
@@ -536,7 +517,6 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           ['aligned','mismatch'].includes(liveCheck.state)&&h('p',null,t('Model'),': ',h('code',{className:'ss-model'},liveCheck.modelId), ' · ',t('Context window'),': ',format(liveCheck.contextWindow)),
           liveCheck.modelChanged&&liveCheck.previousModelId&&h('p',{className:'ss-muted'},t('Previously detected model'),': ',h('code',{className:'ss-model'},liveCheck.previousModelId),liveCheck.previousContextWindow?' · '+format(liveCheck.previousContextWindow)+' tokens':''),
           liveCheck.state==='mismatch'&&h('p',null,t('Check differences, sync, then start a new conversation. Existing conversations keep their previous settings.')),
-          liveCheck.state==='aligned'&&h('p',{className:'ss-muted'},t('Existing conversations may still use an earlier compaction policy.')),
           liveCheck.state==='unavailable'&&h('p',null,t('Previous sync results may be outdated. Check the server connection and try Check differences.')),
           h('p',{className:'ss-muted'},t('Checks on plugin activation, then every 60 seconds, even with Settings closed. No automatic changes or inference requests.')),
           liveCheck.checkedAt&&h('p',{className:'ss-muted'},t('Last checked: '),format(liveCheck.checkedAt))),
@@ -585,13 +565,6 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
             ].map(([field,label])=>h('div',{key:field,'data-budget-field':field},h('strong',null,format(preview.budget?.[field]),' tokens'),h('div',{className:'ss-muted'},t(label))))),
             h('p',{'data-budget-field':'thresholdTokens'},t('Effective compaction threshold: '),format(preview.budget?.thresholdTokens),' tokens (',preview.budget?.thresholdPercent?.toFixed(2),'%)'),
             h('p',{className:'ss-muted'},t('Conversation budget = context − response output. Trigger = min(80% of context, conversation budget − headroom). Retain 16% of the conversation budget.'))),
-          h('div',{'data-testid':'preview-summary-target'},h('h4',null,t('Summary target (estimate)')),
-            form.summaryGuidance&&form.summaryGuidanceMode==='after-truncation'&&h('p',{'data-testid':'summary-recovery-preview',className:'ss-muted'},t('This target applies only during recovery after a truncated summary.')),
-            !form.summaryGuidance?h('p',{'data-testid':'summary-guidance-off'},t('Disabled — native summary instructions are used.')):
-              summaryTargetCeiling!==null&&(summaryTargetCeiling>=256
-                ? h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens (',format(preview.budget.summaryMaxTokens),' ÷ ',format(draft.summaryOutputDivisor),')')
-                : h('p',{'data-testid':'summary-target-native'},t('This preview is below the 256-token minimum. The native summary prompt remains unchanged.'))),
-            form.summaryGuidance&&h('p',{className:'ss-muted'},t('Preview ceiling = summary output limit ÷ output divisor, rounded down. The actual target is also limited by available context and source length.'))),
           h('p',{className:'ss-muted'},t('Only DSH settings are updated. Sync does not switch server models, change Strata configuration, or send inference requests. Start a new conversation after syncing.'))),
         h('div',{className:'ss-actions','data-testid':'sync-apply'},
           h('button',{className:preview?.changes?.length?'primary':'',disabled:pending||!state||dirty||conflict||!preview||state.busy||!preview.changes?.length,onClick:()=>action(async()=>{
