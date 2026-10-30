@@ -17,14 +17,14 @@ The plugin reads Strata's model information, previews the changes, and updates D
 
 Strata Server is read-only to this plugin. Synchronization does not switch or load server models, change server settings, or send test inference requests. Unconfirmed model capabilities keep their existing DSH values.
 
-## What's new in 0.12.4
+## What's new in 0.12.8
 
-- Summary guidance is enabled for new or unspecified configurations, using **After summary truncation**. Explicitly disabled configurations stay disabled.
-- The first summary uses DSH's native instructions. After an output-token truncation, guidance applies to subsequent native compaction attempts in the same conversation, provider and model; a successfully committed summary restores native instructions.
-- The mode selector lists **After summary truncation** before **Every summary**, with matching English, Simplified Chinese and Traditional Chinese labels and help.
-- No extra inference requests or retry loop are added. Existing model limits, target-length divisors and custom prompts are preserved.
+- Native session diagnostics record each calculated summary target, whether the instruction was actually applied, and why it was skipped.
+- Each request's stream result links to DSH's existing compaction events, distinguishing truncation, cancellation and generation completion from a committed checkpoint.
+- Diagnostics contain bounded metadata only. They preserve summary behavior and never send additional inference requests.
+- The optional integration uses DSH's experimental plugin-record API; unavailable logging does not block summaries.
 
-Validation: **209 automated tests** passed, with source/build consistency and package contents verified. This release was not validated with a live model inference run.
+See the [audit event format and native persistence test](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/SUMMARY_AUDIT.md) and [validation notes](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/VALIDATION.md). Automated native persistence verification uses controlled responses. Two additional live Strata compactions completed without truncation: the default mode recorded no applied target, and every-summary mode recorded an applied 1,328-token target. All 45 saved events reloaded unchanged through the native reader.
 
 ## Get started
 

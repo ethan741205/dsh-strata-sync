@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import z from '@deepseek-ai/schemastery';
 import { discoverStrata, planBudget, StrataSyncError } from './core.mjs';
 import { DEFAULT_SUMMARY_TEMPLATE, validSummaryDivisor, validSummaryTemplate, installSummaryGuidance } from './summary.mjs';
+import { installNativeSummaryAudit } from './summary-audit-host.mjs';
 
 export const inject = ['configEditor', 'connection', 'credentials', 'agentPresets'];
 export const Config = z.object({
@@ -19,6 +20,7 @@ export const Config = z.object({
 });
 
 const PACKAGE = 'dsh-strata-sync';
+const PLUGIN_VERSION = '0.12.8';
 const COMPACTION = '@deepseek-ai/dsh-compaction-basic';
 const PRESET = '@deepseek-ai/dsh-agent-preset';
 const CHANNEL = '/api/strata-sync';
@@ -204,11 +206,12 @@ export function apply(ctx, initialConfig) {
     // A server/client mismatch must not enlarge the target past either capacity.
     return Math.min(discovered.model.contextWindow, model.contextWindow);
   }
+  const summaryAudit = installNativeSummaryAudit(ctx, PLUGIN_VERSION);
   installSummaryGuidance(ctx, summaryContext, () => {
     ensureOpen();
     refreshSettings();
     return settings;
-  });
+  }, summaryAudit);
   async function preview(request = {}, observation = {}) {
     ensureOpen();
     payload(request, ['providerId', 'outputTokens']);

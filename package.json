@@ -1,6 +1,6 @@
 {
   "name": "dsh-strata-sync",
-  "version": "0.12.7",
+  "version": "0.12.8",
   "description": "Native DSH settings UI for synchronizing Strata Server models, context and compaction budgets",
   "type": "module",
   "main": "dist/index.js",
@@ -20,6 +20,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test test/*.test.mjs",
+    "test:native-session": "node scripts/test-native-session.mjs",
     "prepack": "npm run build",
     "verify:package": "node scripts/verify-package.mjs",
     "prepublishOnly": "npm test"

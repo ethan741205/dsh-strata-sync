@@ -35,10 +35,10 @@ const fixture = (changes = {}) => ({
   ],
   ...changes,
 });
-async function installed(t, resolveContext = async () => 32768, getSettings = () => ({summaryGuidance:true})) {
+async function installed(t, resolveContext = async () => 32768, getSettings = () => ({summaryGuidance:true}), audit) {
   const ctx = new Context();
   const llm = new Service(ctx, 'llm');
-  const fiber = ctx.plugin(child => installSummaryGuidance(child, resolveContext, () => { const value = getSettings(); return value == null ? value : { summaryGuidanceMode: 'always', ...value }; }));
+  const fiber = ctx.plugin(child => installSummaryGuidance(child, resolveContext, () => { const value = getSettings(); return value == null ? value : { summaryGuidanceMode: 'always', ...value }; }, audit));
   await fiber.await();
   assert.equal(fiber.state, 2);
   t.after(() => fiber.dispose());
@@ -56,6 +56,198 @@ async function collect(stream) {
   for await (const value of stream) result.push(value);
   return result;
 }
+
+function auditCapture() {
+  const attempts = [];
+  return { attempts, begin(options) {
+    const entry = {};
+    attempts.push(entry);
+    return {
+      decision(data) {
+        entry.decision = structuredClone(data);
+        // Observe the actual request at the logging boundary, not afterwards.
+        entry.promptAtDecision = options.messages.at(-1)?.content?.[0]?.text;
+      },
+      finish(data) { entry.result = structuredClone(data); },
+    };
+  } };
+}
+
+test('audit records the exact applied target after mutation and preserves native chunks and options', async t => {
+  const audit = auditCapture();
+  const harness = await installed(t, undefined, () => ({ summaryOutputDivisor: 1.5 }), audit);
+  const options = fixture(), original = options.messages;
+  const chunks = [{ type: 'text-delta', text: 'private summary' },
+    { type: 'usage', usage: { inputTokens: 7000, outputTokens: 2300, totalTokens: 9300 } },
+    { type: 'finish', reason: { kind: 'stop' } }];
+  let calls = 0, prompt;
+  const result = await collect(harness.stream(options, async function* (request) {
+    calls++; prompt = request.messages.at(-1).content[0].text; yield* chunks;
+  }));
+  assert.equal(calls, 1);
+  assert.equal(audit.attempts.length, 1);
+  const record = audit.attempts[0];
+  assert.equal(record.decision.targetTokens, 2730);
+  assert.equal(record.decision.applied, true);
+  assert.equal(record.decision.reason, 'applied');
+  assert.equal(record.decision.effectiveOutputTokensEstimated, 4096);
+  assert.equal(record.promptAtDecision, prompt);
+  assert.equal(prompt, nativePrompt + '\n- ' + summaryInstruction(2730));
+  assert.equal(record.result.outcome, 'completed');
+  assert.equal(record.result.streamCompleted, true);
+  assert.deepEqual(record.result.usage, chunks[1].usage);
+  assert.ok(Number.isSafeInteger(record.result.elapsedMs) && record.result.elapsedMs >= 0);
+  result.forEach((chunk, i) => assert.equal(chunk, chunks[i]));
+  assert.equal(options.messages, original);
+  assert.equal(options.maxTokens, 4096);
+});
+
+test('audit keeps rejected candidate targets and distinguishes uncalculated skip reasons', async t => {
+  for (const row of [
+    { settings: { summaryOutputDivisor: 32 }, reason: 'target-too-small', target: 128, discoveries: 1 },
+    { settings: { summaryGuidance: false }, reason: 'disabled', discoveries: 0 },
+    { settings: { summaryGuidanceMode: 'after-truncation' }, reason: 'awaiting-truncation', discoveries: 0 },
+    { settings: { summaryOutputDivisor: 0 }, reason: 'invalid-settings', discoveries: 0 },
+    { context: null, reason: 'context-unavailable', discoveries: 1 },
+    { changes: { maxTokens: 0 }, reason: 'invalid-max-tokens', discoveries: 0 },
+    { changes: { signal: AbortSignal.abort() }, reason: 'cancelled', discoveries: 0 },
+    { freeze: true, reason: 'non-writable', discoveries: 0 },
+  ]) {
+    const audit = auditCapture(); let discoveries = 0;
+    const harness = await installed(t, async () => { discoveries++; return row.context === null ? null : 32768; }, () => row.settings ?? {}, audit);
+    const options = fixture(row.changes), original = options.messages;
+    if (row.freeze) Object.freeze(options);
+    await collect(harness.stream(options, async function* (request) {
+      assert.equal(request.messages, original);
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    }));
+    assert.equal(discoveries, row.discoveries, row.reason);
+    assert.equal(audit.attempts.length, 1, row.reason);
+    assert.equal(audit.attempts[0].decision.applied, false, row.reason);
+    assert.equal(audit.attempts[0].decision.reason, row.reason);
+    assert.equal(audit.attempts[0].decision.targetTokens, row.target ?? null, row.reason);
+  }
+});
+
+test('audit retains a calculated target when settings change before application', async t => {
+  const audit = auditCapture(); let settings = { summaryGuidance: true };
+  const harness = await installed(t, async () => { settings = { summaryGuidance: false }; return 32768; }, () => settings, audit);
+  await collect(harness.stream(fixture(), async function* (request) {
+    assert.equal(request.messages.at(-1).content[0].text, nativePrompt);
+    yield { type: 'finish', reason: { kind: 'stop' } };
+  }));
+  assert.equal(audit.attempts[0].decision.targetTokens, 2048);
+  assert.equal(audit.attempts[0].decision.applied, false);
+  assert.equal(audit.attempts[0].decision.reason, 'settings-changed');
+});
+
+test('audit distinguishes native truncation, errors, cancellation and incomplete consumption', async t => {
+  for (const [finish, outcome] of [['max-tokens', 'truncated'], ['error', 'error'], ['aborted', 'cancelled'], ['tool-calls', 'completed']]) {
+    const audit = auditCapture(), harness = await installed(t, undefined, undefined, audit);
+    await collect(harness.stream(fixture(), async function* () { yield { type: 'finish', reason: { kind: finish } }; }));
+    assert.equal(audit.attempts[0].result.outcome, outcome);
+    assert.equal(audit.attempts[0].result.finishReason, finish);
+  }
+  const audit = auditCapture(), harness = await installed(t, undefined, undefined, audit);
+  const options = fixture(), original = options.messages;
+  const stream = harness.stream(options, async function* () { yield { type: 'finish', reason: { kind: 'stop' } }; });
+  await stream.next(); await stream.return();
+  assert.equal(audit.attempts[0].result.outcome, 'incomplete');
+  assert.equal(audit.attempts[0].result.streamCompleted, false);
+  assert.equal(options.messages, original);
+});
+
+test('audit failures never replace native errors or affect the disabled dispatch boundary', async t => {
+  const failure = new Error('native transport failure');
+  for (const audit of [
+    { begin() { throw Error('audit unavailable'); } },
+    { begin() { return { decision() { throw Error('audit write failed'); }, finish() { throw Error('audit write failed'); } }; } },
+  ]) {
+    for (const enabled of [true, false]) {
+      const harness = await installed(t, undefined, () => ({ summaryGuidance: enabled }), audit);
+      const options = fixture(), original = options.messages;
+      await assert.rejects(collect(harness.stream(options, async function* () { throw failure; })), error => error === failure);
+      assert.equal(options.messages, original);
+    }
+  }
+  const audit = auditCapture(), harness = await installed(t, undefined, () => ({ summaryGuidance: false }), audit);
+  assert.throws(() => harness.stream(fixture(), () => { throw failure; }), error => error === failure);
+  assert.equal(audit.attempts[0].result.outcome, 'error');
+});
+
+test('duplicate audit hooks record once even when guidance is disabled', async t => {
+  const audit = auditCapture(), settings = () => ({ summaryGuidance: false });
+  const harness = await installed(t, undefined, settings, audit);
+  const second = harness.ctx.plugin(child => installSummaryGuidance(child, async () => 32768, settings, audit));
+  await second.await(); t.after(() => second.dispose());
+  let calls = 0;
+  await collect(harness.stream(fixture(), async function* () { calls++; yield { type: 'finish', reason: { kind: 'stop' } }; }));
+  assert.equal(calls, 1);
+  assert.equal(audit.attempts.length, 1);
+});
+
+test('a disabled audit hook does not suppress later enabled guidance or claim its decision', async t => {
+  const audit = auditCapture();
+  const harness = await installed(t, undefined, () => ({ summaryGuidance: false }), audit);
+  const second = harness.ctx.plugin(child => installSummaryGuidance(child, async () => 32768,
+    () => ({ summaryGuidance: true, summaryGuidanceMode: 'always' }), audit));
+  await second.await(); t.after(() => second.dispose());
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, nativePrompt + '\n- ' + summaryInstruction(2048));
+    yield { type: 'finish', reason: { kind: 'stop' } };
+  }));
+  assert.equal(audit.attempts.length, 1);
+  assert.equal(audit.attempts[0].decision.applied, true);
+  assert.equal(audit.attempts[0].decision.targetTokens, 2048);
+});
+
+test('audit ignores throwing usage getters and preserves native chunk identity', async t => {
+  const chunk = { type: 'usage', get usage() { throw Error('private malformed usage'); } };
+  for (const enabled of [true, false]) {
+    const audit = auditCapture();
+    const harness = await installed(t, undefined, () => ({ summaryGuidance: enabled }), audit);
+    const results = await collect(harness.stream(fixture(), async function* () {
+      yield chunk; yield { type: 'finish', reason: { kind: 'stop' } };
+    }));
+    assert.equal(results[0], chunk);
+    assert.equal(audit.attempts[0].result.outcome, 'completed');
+  }
+});
+
+test('audited passthrough forwards native return and throw before iteration', async t => {
+  for (const method of ['return', 'throw']) {
+    const audit = auditCapture();
+    const harness = await installed(t, undefined, () => ({ summaryGuidance: false }), audit);
+    let called = 0;
+    const argument = method === 'throw' ? new Error('native caller error') : 'return value';
+    const stream = harness.stream(fixture(), () => ({
+      [Symbol.asyncIterator]() { return this; },
+      async next() { assert.fail('No next() was requested'); },
+      async [method](value) { called++; assert.equal(value, argument); return { value: 'native cleanup result', done: true }; },
+    }));
+    assert.deepEqual(await stream[method](argument), { value: 'native cleanup result', done: true });
+    assert.equal(called, 1);
+    assert.equal(audit.attempts[0].result.outcome, 'incomplete');
+    assert.equal(audit.attempts[0].result.streamCompleted, false);
+  }
+});
+
+test('closing an unstarted guided iterator releases audit ownership for a reused request', async t => {
+  for (const method of ['return', 'throw']) {
+    const audit = auditCapture(); let enabled = true;
+    const harness = await installed(t, undefined, () => ({ summaryGuidance: enabled }), audit);
+    const options = fixture();
+    const first = harness.stream(options, () => { assert.fail('Unstarted guidance must not dispatch'); });
+    const error = new Error('caller closed before starting');
+    if (method === 'throw') await assert.rejects(first.throw(error), value => value === error);
+    else await first.return();
+    assert.equal(audit.attempts.length, 0);
+    enabled = false;
+    await collect(harness.stream(options, async function* () { yield { type: 'finish', reason: { kind: 'stop' } }; }));
+    assert.equal(audit.attempts.length, 1);
+    assert.equal(audit.attempts[0].decision.reason, 'disabled');
+  }
+});
 
 test('target uses only the effective output budget and source length, both at 50% by default', () => {
   assert.equal(planSummaryTarget(4096, 12000), 2048);

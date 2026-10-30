@@ -13,7 +13,12 @@ Validation date: 2026-10-31 (Asia/Taipei).
 
 ## Automated verification
 
-Version **0.12.7 passed 206 automated tests** plus package verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
+Version **0.12.8 passed 238 automated tests** plus native session persistence verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
+
+- Native audit decisions preserve the calculated candidate (including rejected small values), applied state and skip reason; stream records preserve terminal outcome and numeric usage. Records are bounded, use a field whitelist, and never copy prompts, summaries or raw exception messages.
+- Audit failures preserve native chunks, error identity, cancellation and iterator cleanup. Duplicate hooks, mixed disabled/enabled hooks, settings changes during discovery, concurrent attempts, early closure before first iteration, hot reload and missing host services are covered.
+- `npm run test:native-session` passed against installed **DSH 0.2.1-rc.5**. It uses the real host module resolver, Session, BasicCompactionEngine and Zstd persistence backend with local controlled responses. Three transactions verify truncation, a **2730-token applied target with committed checkpoint**, and a normally stopped stream rejected by native size validation. The same transactions without auditing produce identical model requests, checkpoint content and native errors.
+- Native persistence verification writes two batches, flushes, closes and reopens in a new Context without loading the audit plugin. All six plugin records and their native lifecycle associations survive unchanged; restored conversation content is identical. A negative fixture missing `ignorable` is rejected by the native reader. Temporary test data is removed, and no real sessions or live models are used. See [event contract and test setup](SUMMARY_AUDIT.md).
 
 - The main preview omits the estimated summary-target card, while retaining summary output limits and all guidance controls. The aligned model-status card no longer repeats the existing-conversation policy reminder. These presentation changes leave runtime summary calculations and model/compaction settings unchanged.
 
@@ -44,10 +49,21 @@ Version **0.12.7 passed 206 automated tests** plus package verification. Unspeci
 
 The package verifier checks the public file list, English root README selection, translated documentation links, entry points, source/build consistency and publishing metadata. It excludes private configuration, user conversations, credentials, backups and the native-prompt test fixture from the public package.
 
+## Live desktop verification
+
+On 2026-10-31 (Asia/Taipei), 0.12.8 was installed and enabled in DSH Desktop 0.2.1-rc.5. Two manual native compactions used a dedicated synthetic-data conversation and the live Strata deepseek-v4.1-flash model:
+
+| Mode | Calculated target | Applied | Output tokens | Result |
+|---|---:|---|---:|---|
+| after-truncation (initial, unarmed) | null | false | 421 | stop; checkpoint committed |
+| always (temporary test setting) | 1328 | true | 498 | stop; checkpoint committed |
+
+Both requests retained their 4096-token hard cap. The second target matched floor(min(4096 / 1.5, 2657 / 2)). Native summary events, replacement checkpoints and error-free ends confirmed both commits. The native persistence reader reopened all 45 events across 17 Zstd frames in a separate Context without the audit plugin; every event matched the saved data, the restored surface was valid, and verification left the source file unchanged. The original after-truncation settings were restored; both configuration files matched their pre-test bytes. Private session content and identifiers are excluded from this public report.
+
 ## Compatibility and limits
 
-The integration targets **DSH Desktop 0.2.1-rc.3**, Cordis 4.0.5 and pi-ai 1.1.0. Native-host preview, synchronization, backup and interface checks used an isolated DSH profile and metadata-only fixture server. Native-summary integration probes used synthetic adapter responses.
+Core synchronization was validated with **DSH Desktop 0.2.1-rc.3**, Cordis 4.0.5 and pi-ai 1.1.0; the native audit and persistence integration was validated with **0.2.1-rc.5**. Native-host preview, synchronization, backup and interface checks used an isolated DSH profile and metadata-only fixture server. Native-summary integration probes used synthetic adapter responses. The experimental record API is capability-checked and is not claimed compatible with all earlier or future DSH builds.
 
-These checks validate configuration, dispatch and preservation of native behavior. Runtime model-switch monitoring and Settings states were verified with mocked server responses and rendered UI tests, not by switching the user's live model. They do **not** establish that real models always follow the writing target, never truncate, or compact at an optimal frequency. No inference benchmark was run for this release. Server configuration and the user's running DSH profile were not changed.
+These checks validate configuration, dispatch and preservation of native behavior. Runtime model-switch monitoring and Settings states were verified with mocked server responses and rendered UI tests, not by switching the user's live model. They do **not** establish that real models always follow the writing target, never truncate, or compact at an optimal frequency. No inference benchmark was run for this release. Live verification temporarily changed only the summary guidance mode and then restored the original configuration; server configuration was not changed.
 
 Existing conversations retain their Agent preset revision; start a new conversation after synchronizing model settings.

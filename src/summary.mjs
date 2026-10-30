@@ -11,14 +11,19 @@ export const validSummaryTemplate = value => typeof value === 'string' && value.
 const augmentedMessages = globalThis[Symbol.for('dsh-strata-sync/summary-augmented')] ??= new WeakSet();
 // Duplicate plugin hooks must not independently observe the same native call.
 const observedRequests = globalThis[Symbol.for('dsh-strata-sync/summary-observed')] ??= new WeakSet();
+// Audit ownership must not suppress another hook's existing guidance behavior.
+const auditClaims = globalThis[Symbol.for('dsh-strata-sync/summary-audit-claims')] ??= new WeakMap();
 export const MAX_RECOVERY_SESSIONS = 128;
 // Eight mandatory headings need enough space for a meaningful checkpoint. Do
 // not round a tiny target UP; leave native behavior intact instead.
 export const MIN_SUMMARY_TARGET = 256;
-export function planSummaryTarget(effectiveOutputTokens, sourceTokens, outputDivisor = 2, sourceDivisor = 2) {
+function summaryTargetCandidate(effectiveOutputTokens, sourceTokens, outputDivisor, sourceDivisor) {
   if (![effectiveOutputTokens, sourceTokens].every(positive) || ![outputDivisor, sourceDivisor].every(validSummaryDivisor)) return null;
-  const target = Math.floor(Math.min(effectiveOutputTokens / outputDivisor, sourceTokens / sourceDivisor));
-  return target >= MIN_SUMMARY_TARGET ? target : null;
+  return Math.floor(Math.min(effectiveOutputTokens / outputDivisor, sourceTokens / sourceDivisor));
+}
+export function planSummaryTarget(effectiveOutputTokens, sourceTokens, outputDivisor = 2, sourceDivisor = 2) {
+  const target = summaryTargetCandidate(effectiveOutputTokens, sourceTokens, outputDivisor, sourceDivisor);
+  return target !== null && target >= MIN_SUMMARY_TARGET ? target : null;
 }
 
 export function summaryInstruction(target, template = DEFAULT_SUMMARY_TEMPLATE) {
@@ -114,7 +119,7 @@ export function estimateEffectiveSummaryBudget(options, contextWindow, template 
  * messages property for the lifetime of this stream; never mutate frozen
  * messages or recursively dispatch a second LLM request.
  */
-export function installSummaryGuidance(ctx, resolveContext, getSettings = () => ({})) {
+export function installSummaryGuidance(ctx, resolveContext, getSettings = () => ({}), audit) {
   let closed = false;
   // Only routing identifiers and booleans are retained, never prompts or output.
   // A newer attempt owns settlement, so a late older failure cannot re-arm a
@@ -122,6 +127,93 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
   const recovery = new Map();
   const commits = new Map();
   let attempt = 0;
+  let preferenceAudit;
+  // Auditing is observational: a missing/throwing sink must never replace a
+  // native stream, change its chunks, or turn a cancellation into an error.
+  function beginAudit(options) {
+    try { return audit?.begin(options); } catch { return undefined; }
+  }
+  function record(handle, method, data) {
+    try { handle?.[method](data)?.catch?.(() => {}); } catch { /* Fail open. */ }
+  }
+  function streamAudit(options, handle) {
+    if (!handle) return { chunk() {}, complete() {}, fail() {}, close() {} };
+    const started = performance.now();
+    let finish, usage, completed = false, failed = false;
+    return {
+      chunk(value) {
+        try {
+          if (value?.type === 'finish') finish = value.reason?.kind;
+          if (value?.type === 'usage') usage = value.usage;
+        } catch { /* Observation must not introduce a native stream failure. */ }
+      },
+      complete() { completed = true; },
+      fail() { failed = true; },
+      close() {
+        try {
+          const outcome = options.signal?.aborted || finish === 'aborted' ? 'cancelled'
+            : failed ? 'error' : !completed ? 'incomplete'
+            : finish === 'max-tokens' ? 'truncated'
+            : ['stop', 'tool-calls'].includes(finish) ? 'completed'
+            : ['error', 'context-window-exceeded'].includes(finish) ? 'error' : 'incomplete';
+          record(handle, 'finish', { finishReason: finish ?? null, outcome, usage,
+            streamCompleted: completed, elapsedMs: Math.max(0, Math.floor(performance.now() - started)) });
+        } catch { /* Cleanup must not mask the native result or exception. */ }
+      },
+    };
+  }
+  function passthrough(options, next, decision) {
+    if (!audit || auditClaims.has(options)) return next();
+    const claim = {};
+    auditClaims.set(options, claim);
+    const release = () => { if (auditClaims.get(options) === claim) auditClaims.delete(options); };
+    let stream;
+    try { stream = next(); }
+    catch (error) {
+      if (auditClaims.get(options) === claim) {
+        const handle = beginAudit(options), tracker = streamAudit(options, handle);
+        record(handle, 'decision', decision); tracker.fail(); tracker.close(); release();
+      }
+      throw error;
+    }
+    // A later enabled hook can take ownership while next() builds the native
+    // stream. A disabled hook must not hide its actual application or suppress it.
+    if (auditClaims.get(options) !== claim) return stream;
+    const handle = beginAudit(options);
+    if (!handle) { release(); return stream; }
+    const tracker = streamAudit(options, handle);
+    record(handle, 'decision', decision);
+    let iterator, synchronous = false, settled = false;
+    const underlying = () => {
+      if (!iterator) {
+        synchronous = typeof stream[Symbol.asyncIterator] !== 'function';
+        iterator = synchronous ? stream[Symbol.iterator]() : stream[Symbol.asyncIterator]();
+      }
+      return iterator;
+    };
+    const settle = () => { if (!settled) { settled = true; tracker.close(); release(); } };
+    async function advance(method, value) {
+      try {
+        const current = underlying();
+        let result;
+        if (typeof current[method] === 'function') result = await current[method](value);
+        else if (method === 'throw') throw value;
+        else result = { value, done: true };
+        if (synchronous) result = { ...result, value: await result.value };
+        if (result.done) { if (method === 'next') tracker.complete(); settle(); }
+        else tracker.chunk(result.value);
+        return result;
+      } catch (error) { tracker.fail(); settle(); throw error; }
+    }
+    // Explicit forwarding also preserves return()/throw() before the first
+    // next(); an unstarted async-generator wrapper would skip native cleanup.
+    return {
+      [Symbol.asyncIterator]() { return this; },
+      next(value) { return advance('next', value); },
+      return(value) { return advance('return', value); },
+      throw(error) { return advance('throw', error); },
+    };
+  }
   function recoveryKey(options) {
     const parts = [options.sessionId, options.provider, options.model];
     return parts.every(value => typeof value === 'string' && value.length > 0 && value.length <= 512)
@@ -143,11 +235,18 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
       const outputDivisor = value.summaryOutputDivisor === undefined ? 2 : value.summaryOutputDivisor;
       const sourceDivisor = value.summarySourceDivisor === undefined ? 2 : value.summarySourceDivisor;
       const template = value.summaryPromptTemplate === undefined ? DEFAULT_SUMMARY_TEMPLATE : value.summaryPromptTemplate;
+      preferenceAudit = { enabled: typeof enabled === 'boolean' ? enabled : null,
+        mode: ['always', 'after-truncation'].includes(mode) ? mode : null,
+        outputDivisor: validSummaryDivisor(outputDivisor) ? outputDivisor : null,
+        sourceDivisor: validSummaryDivisor(sourceDivisor) ? sourceDivisor : null };
       const valid = enabled === true && ['always', 'after-truncation'].includes(mode)
         && [outputDivisor, sourceDivisor].every(validSummaryDivisor) && validSummaryTemplate(template);
       if (!valid || mode !== 'after-truncation') { recovery.clear(); commits.clear(); }
       return valid ? { mode, outputDivisor, sourceDivisor, template } : null;
-    } catch { recovery.clear(); commits.clear(); return null; }
+    } catch {
+      preferenceAudit = { enabled: null, mode: null, outputDivisor: null, sourceDivisor: null };
+      recovery.clear(); commits.clear(); return null;
+    }
   }
   // A stopped stream can still fail native checkpoint validation. DSH records
   // compaction/summary only after that validation, then commits its checkpoint
@@ -176,44 +275,72 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
     // Reading the current master switch also clears pending recovery when the
     // next request is an ordinary agent call after guidance was disabled.
     const selected = preferences();
+    if (closed || options?.purpose !== 'compaction' || observedRequests.has(options) || augmentedMessages.has(options.messages)) return next();
+    const decision = { ...preferenceAudit, requestedMaxTokens: positive(options.maxTokens) ? options.maxTokens : null,
+      sourceTokensEstimated: null, effectiveOutputTokensEstimated: null, targetTokens: null, applied: false };
+    const skip = reason => passthrough(options, next, { ...decision, reason });
     const native = nativeSummaryMessage(options);
     const descriptor = options && Object.getOwnPropertyDescriptor(options, 'messages');
-    if (closed || !native || !descriptor?.writable || options.signal?.aborted || observedRequests.has(options)) return next();
+    if (!native) return skip('unsupported-prompt');
+    if (!descriptor?.writable) return skip('non-writable');
+    if (options.signal?.aborted) return skip('cancelled');
     // Disabled guidance must not perform even metadata discovery. Native DSH
     // compaction and its request options still pass through unchanged.
-    if (!selected) return next();
+    if (!selected) return skip(decision.enabled === false ? 'disabled' : 'invalid-settings');
     const key = selected.mode === 'after-truncation' ? recoveryKey(options) : null;
-    if (selected.mode === 'after-truncation' && key === null) return next();
+    if (selected.mode === 'after-truncation' && key === null) return skip('missing-session-route');
     const sourceTokens = estimateSummarySource(options.messages);
-    if (!positive(sourceTokens) || !positive(options.maxTokens)) return next();
-    return (async function* () {
+    decision.sourceTokensEstimated = sourceTokens;
+    if (!positive(sourceTokens)) return skip('unsupported-input');
+    if (!positive(options.maxTokens)) return skip('invalid-max-tokens');
+    const claim = {};
+    if (audit) auditClaims.set(options, claim);
+    const releaseClaim = () => { if (auditClaims.get(options) === claim) auditClaims.delete(options); };
+    const stream = (async function* () {
       const original = options.messages;
       const observation = key === null ? null : beginRecovery(key);
+      const handle = beginAudit(options);
+      const tracker = streamAudit(options, handle);
       let augmented;
       observedRequests.add(options);
       try {
+        decision.reason = 'awaiting-truncation';
         if (selected.mode === 'always' || observation.state.armed) {
           let contextWindow;
           try { contextWindow = await resolveContext(options); }
           catch { /* Metadata/compatibility failure must not break native inference. */ }
           const effectiveOutput = estimateEffectiveSummaryBudget(options, contextWindow, selected.template);
-          const target = planSummaryTarget(effectiveOutput, sourceTokens, selected.outputDivisor, selected.sourceDivisor);
+          const candidate = summaryTargetCandidate(effectiveOutput, sourceTokens, selected.outputDivisor, selected.sourceDivisor);
+          const target = candidate !== null && candidate >= MIN_SUMMARY_TARGET ? candidate : null;
+          decision.effectiveOutputTokensEstimated = effectiveOutput;
+          decision.targetTokens = candidate;
           const current = preferences();
+          decision.reason = closed ? 'closed' : options.signal?.aborted ? 'cancelled'
+            : !current || !Object.keys(selected).every(key => selected[key] === current[key]) ? 'settings-changed'
+            : options.messages !== original ? 'messages-changed'
+            : !positive(contextWindow) ? 'context-unavailable'
+            : effectiveOutput === null ? 'effective-budget-unavailable'
+            : effectiveOutput === 0 ? 'insufficient-output-budget'
+            : target === null ? 'target-too-small' : 'applied';
           if (!closed && !options.signal?.aborted && current && Object.keys(selected).every(key => selected[key] === current[key]) && target !== null && options.messages === original) {
             const last = { ...native, content: [{ ...native.content[0], text: `${native.content[0].text}\n- ${summaryInstruction(target, selected.template)}` }] };
             augmented = [...original.slice(0, -1), last];
             augmentedMessages.add(augmented);
             options.messages = augmented;
+            decision.applied = true;
           }
         }
+        record(handle, 'decision', decision);
         let finish;
         // Native DSH uses finish.reason.kind = max-tokens for truncation.
         // Forward all chunks unchanged and call next exactly once. Cordis's
         // next consumes the waterfall and cannot be used to replay a retry.
         for await (const chunk of next()) {
+          tracker.chunk(chunk);
           if (chunk?.type === 'finish') finish = chunk.reason?.kind;
           yield chunk;
         }
+        tracker.complete();
         const current = preferences();
         if (observation && !closed && !options.signal?.aborted && current?.mode === 'after-truncation'
             && recovery.get(key) === observation.state && observation.state.latest === observation.ticket) {
@@ -226,13 +353,23 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
             observation.state.lastCompletedTicket = observation.ticket;
           }
         }
-      } finally {
+      } catch (error) { tracker.fail(); throw error; }
+      finally {
+        tracker.close();
+        releaseClaim();
         if (observation && recovery.get(key) === observation.state && observation.state.latest === observation.ticket && !observation.state.armed) recovery.delete(key);
         observedRequests.delete(options);
         if (augmented) augmentedMessages.delete(augmented);
         if (augmented && options.messages === augmented) options.messages = original;
       }
     })();
+    if (audit) for (const method of ['return', 'throw']) {
+      const close = stream[method].bind(stream);
+      // Before the first next(), an async generator has not entered its finally.
+      // Releasing only our own claim avoids hiding a later reused request.
+      stream[method] = value => close(value).finally(releaseClaim);
+    }
+    return stream;
   });
   ctx.effect(() => () => { closed = true; recovery.clear(); commits.clear(); remove?.(); removeCommit?.(); }, 'strata-sync: summary guidance lifetime');
 }
