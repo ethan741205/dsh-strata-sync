@@ -11,12 +11,15 @@ Validation date: 2026-10-30 (Asia/Taipei).
 
 ## Automated verification
 
-All **155 automated tests pass** for the current runtime. Coverage includes:
+All **162 automated tests pass** for the current runtime. Coverage includes:
+
+- Automatic output matches Strata's 30% formula with a 4,096 floor and 32,768 ceiling. Tests cover 8K through 1M contexts, rounding at the ceiling, unchanged server/manual precedence, valid small-window compaction budgets and all three UI translations. The 8K calculated-output case limits compaction headroom and summary cap to 2,048; 32K and larger retain 4,096.
 
 - Actual pi-ai context clamping across multiple input sizes, near-full and exhausted context, independent source length, additional prompt costs, disabled-mode zero discovery and restored native requests.
 - Native Cordis waterfall dispatch, immutable messages, concurrent summaries, duplicate hooks, cancellation, metadata failures, early stream closure, native errors and unload.
 - Verified model discovery, selected-provider/loaded-model matching, alias validation, input types, model-specific reasoning choices and eight mocked SDK wire cases.
-- Preference validation, idle guards, stale-preview rejection, concurrent edits, backup and rollback, startup synchronization, hot reload and enabled Agent preset policies.
+- Preference validation, synchronization write guards, stale-preview rejection, concurrent edits, backup and rollback, startup synchronization, hot reload and enabled Agent preset policies.
+- Synchronization during suspended generation and summary streams, including maintenance status, uses synthetic responses with a mocked ConfigEditor. Requests complete unchanged; simultaneous sync is rejected, new steps wait during writes, and both success and rollback release the barrier. These tests do not exercise a live desktop task or native ConfigEditor reload during a real model stream.
 - Three-language settings rendering, editable prompt preservation, custom divisors, preview ceilings, default-off behavior and preference conflicts.
 
 The package verifier checks the public file list, English root README selection, translated documentation links, entry points, source/build consistency and publishing metadata. It excludes private configuration, user conversations, credentials, backups and the native-prompt test fixture from the public package.

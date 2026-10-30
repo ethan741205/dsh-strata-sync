@@ -112,6 +112,17 @@ async function mount({ initial = status(), previewResult = preview(), failEndpoi
   };
 }
 
+test('fallback output help includes Strata ratio and both bounds in all locales', async t => {
+  const ui=await mount();t.after(()=>ui.unmount());
+  for(const locale of ['en','zh-Hans','zh-Hant']) {
+    await ui.changeLanguage(locale);
+    assert.match(ui.container.textContent,/30%/);
+    assert.match(ui.container.textContent,/4,096/);
+    assert.match(ui.container.textContent,/32,768/);
+    assert.doesNotMatch(ui.container.textContent,/16,384/);
+  }
+});
+
 test('native module loader registers an English Settings section without displaying credentials', async t => {
   const details = await mount(); t.after(() => details.unmount());
   assert.equal(details.container.querySelector('h2').textContent, 'dsh-strata-sync');
@@ -124,6 +135,36 @@ test('native module loader registers an English Settings section without display
   assert.match(details.container.textContent, /Choose an existing provider/);
 });
 
+test('all locales lead with a read-only check, then review before sync, with optional controls collapsed', async () => {
+  for (const locale of ['en','zh-Hans','zh-Hant']) {
+    const ui=await mount({locale,initial:status({summaryGuidance:false})});
+    try {
+      const workflow=ui.container.querySelector('[data-testid="sync-workflow"]');
+      const optional=ui.container.querySelector('[data-testid="summary-target"]');
+      const preferences=ui.container.querySelector('[data-testid="sync-preferences"]');
+      const check=ui.container.querySelector('[data-testid="check-differences"]');
+      const apply=ui.container.querySelector('[data-testid="sync-apply"] button');
+      assert.equal(optional.open,false);
+      assert.equal(preferences.open,false);
+      assert.ok(workflow.compareDocumentPosition(optional)&window.Node.DOCUMENT_POSITION_FOLLOWING);
+      assert.equal(workflow.querySelector('button'),check);
+      assert.ok(check.classList.contains('primary'));
+      assert.equal(apply.disabled,true);
+      await ui.click(check);
+      assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
+      const review=workflow.querySelector('[data-testid="sync-preview"]');
+      assert.ok(review.querySelector('table'));
+      assert.ok(review.compareDocumentPosition(apply)&window.Node.DOCUMENT_POSITION_FOLLOWING);
+      assert.ok(apply.classList.contains('primary'));
+      assert.equal(apply.disabled,false);
+      await ui.click(optional.querySelector('summary'));
+      assert.equal(optional.open,true);
+      assert.ok(optional.querySelector('[data-testid="summary-guidance-toggle"]'));
+      assert.ok(optional.querySelector('textarea'));
+    } finally { await ui.unmount(); }
+  }
+});
+
 test('omitted summary guidance defaults off in all locales without writing preferences', async t => {
   for (const locale of ['en','zh-Hans','zh-Hant']) {
     const ui=await mount({initial:status({summaryGuidance:undefined}),locale});
@@ -131,7 +172,7 @@ test('omitted summary guidance defaults off in all locales without writing prefe
       assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').checked,false);
       await ui.click(ui.button(locale==='en'?'Check differences':locale==='zh-Hans'?'检查差异':'檢查差異'));
       assert.equal(ui.container.querySelector('[data-testid="summary-target-ceiling"]'),null);
-      assert.ok(ui.container.querySelector('[data-testid="summary-guidance-off"]'));
+      assert.equal(ui.container.querySelector('[data-testid="summary-guidance-off"]'),null);
       assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
     } finally { await ui.unmount(); }
   }
@@ -180,7 +221,7 @@ test('summary controls save only changed preferences with their revision and per
   assert.equal(ui.container.querySelector('[data-testid="summary-output-divisor"]').value,'32');
   await ui.click(ui.button('Check differences'));
   assert.equal(ui.container.querySelector('[data-testid="summary-target-ceiling"]'),null);
-  assert.match(ui.container.querySelector('[data-testid="summary-guidance-off"]').textContent,/No extra sentence/);
+  assert.equal(ui.container.querySelector('[data-testid="summary-guidance-off"]'),null);
   assert.equal(ui.calls.some(call=>call.name==='apply'),false);
 });
 
@@ -292,11 +333,12 @@ test('compact summary card displays the exact editable prompt and hides detailed
   const editor=card.querySelector('[data-testid="summary-prompt"]');
   const details=card.querySelector('[data-testid="summary-details"]');
   assert.equal(editor.value,DEFAULT_SUMMARY_TEMPLATE);
-  assert.equal(editor.closest('details'),null);
+  assert.equal(editor.closest('details')===card,true);
+  assert.equal(card.open,false);
   assert.equal(details.open,false);
   assert.equal(card.querySelectorAll(':scope > p').length,1);
-  assert.equal(card.querySelector('[data-testid="summary-output-divisor"]').closest('details'),null);
-  assert.equal(card.querySelector('[data-testid="summary-source-divisor"]').closest('details'),null);
+  assert.equal(card.querySelector('[data-testid="summary-output-divisor"]').closest('details')===card,true);
+  assert.equal(card.querySelector('[data-testid="summary-source-divisor"]').closest('details')===card,true);
   assert.equal(ui.button('Restore default prompt').disabled,true);
 });
 
@@ -418,7 +460,7 @@ test('editing a previewed budget invalidates it and blocks stale apply', async t
   assert.equal(ui.calls.filter(call => call.name === 'apply').length, 0);
 });
 
-test('busy status blocks apply and latest idle status unlocks a busy preview', async t => {
+test('a concurrent sync write blocks apply until the write barrier clears', async t => {
   const ui=await mount({initial:status({busy:true}),previewResult:preview({busy:true})});t.after(()=>ui.unmount());
   await ui.click(ui.button('Check differences'));
   assert.equal(ui.button('Back up and sync').disabled,true);

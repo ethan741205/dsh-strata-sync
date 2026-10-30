@@ -11,11 +11,11 @@ window.__ModuleLoader__.load({
 "Automatic calculation": {"zh-Hant":"自動計算","zh-Hans":"自动计算"},
 "Server has no fixed output limit.": {"zh-Hant":"伺服器未設定固定輸出上限。","zh-Hans":"服务器未设置固定输出上限。"},
 "Server output limit could not be verified.": {"zh-Hant":"無法確認伺服器的輸出上限。","zh-Hans":"无法确认服务器的输出上限。"},
-"Leave blank to use the server output default; if absent or unlimited, use 30% of context, up to 16,384. An explicit override takes priority.": {"zh-Hant":"留空會採用伺服器輸出預設值；未提供或無固定上限時，使用上下文的 30%，最多 16,384。明確填寫的覆寫值優先。","zh-Hans":"留空采用服务器输出默认值；未提供或无固定上限时，使用上下文的 30%，最多 16,384。明确填写的覆盖值优先。"},
+"Leave blank to use the server output default; if absent or unlimited, use 30% of context, at least 4,096 and at most 32,768. An explicit override takes priority.": {"zh-Hant":"留空會採用伺服器輸出預設值；未提供或無固定上限時，使用上下文的 30%，最低 4,096、最高 32,768。明確填寫的覆寫值優先。","zh-Hans":"留空采用服务器输出默认值；未提供或无固定上限时，使用上下文的 30%，最低 4,096、最高 32,768。明确填写的覆盖值优先。"},
 "Strata returned an invalid output limit. Review the server setting before syncing.": {"zh-Hant":"Strata 回傳無效的輸出上限，請先檢查伺服器設定。","zh-Hans":"Strata 返回无效的输出上限，请先检查服务器设置。"},
-  "Runs once on the next DSH start. Waits for running tasks to finish; no periodic server checks.": {
-    "zh-Hant": "下次啟動 DSH 時同步一次；若有工作執行中，會等到閒置，不再定期檢查伺服器。",
-    "zh-Hans": "下次启动 DSH 时同步一次；如有任务运行中，会等待空闲，不再定期检查服务器。"
+  "Runs once on the next DSH start; no periodic server checks.": {
+    "zh-Hant": "下次啟動 DSH 時同步一次，不再定期檢查伺服器。",
+    "zh-Hans": "下次启动 DSH 时同步一次，不再定期检查服务器。"
   },
   "Image": {"zh-Hant":"圖片","zh-Hans":"图片"},
   "View mapping": {"zh-Hant":"查看參數對應","zh-Hans":"查看参数映射"},
@@ -151,10 +151,6 @@ window.__ModuleLoader__.load({
     "zh-Hant": "本次預覽低於 256 tokens 的最低目標，將保留原生摘要提示詞。",
     "zh-Hans": "本次预览低于 256 tokens 的最低目标，将保留原生摘要提示词。"
   },
-  "Summary guidance is off. No extra sentence is added to the native prompt.": {
-    "zh-Hant": "摘要提示補充已關閉，不會在原生提示詞中加上額外句子。",
-    "zh-Hans": "摘要提示补充已关闭，不会在原生提示词中添加额外句子。"
-  },
   "Save preferences to apply these controls to subsequent summary requests; other model and compaction settings stay unchanged.": {
     "zh-Hant": "儲存偏好後，這些控制項會套用至後續摘要請求；其他模型與壓縮設定保持不變。",
     "zh-Hans": "保存偏好后，这些控制项将应用于后续摘要请求；其他模型与压缩设置保持不变。"
@@ -243,9 +239,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "正在載入同步設定…",
     "zh-Hans": "正在加载同步设置…"
   },
-  "DSH is running a task. Synchronization will wait until all tasks are idle.": {
-    "zh-Hant": "DSH 正在執行工作，同步會等到所有工作閒置後進行。",
-    "zh-Hans": "DSH 正在执行任务，同步会等到所有任务空闲后进行。"
+  "A synchronization is applying settings. Please wait.": {
+    "zh-Hant": "正在套用同步設定，請稍候。",
+    "zh-Hans": "正在应用同步设置，请稍候。"
   },
   "Strata provider": {
     "zh-Hant": "Strata 供應者",
@@ -369,8 +365,19 @@ window.__ModuleLoader__.load({
   }
 };
     Object.assign(translations, {
+      'Sync the model and context budgets from Strata Server to DSH.': {'zh-Hant':'將 Strata Server 的模型與上下文預算同步至 DSH。','zh-Hans':'将 Strata Server 的模型与上下文预算同步到 DSH。'},
+      'Start here': {'zh-Hant':'從這裡開始','zh-Hans':'从这里开始'},
+      'First, check differences to read the loaded model and preview the changes.': {'zh-Hant':'先點「檢查差異」，讀取目前載入的模型並預覽變更。','zh-Hans':'先点击“检查差异”，读取当前加载的模型并预览更改。'},
+      'Review changes': {'zh-Hant':'預覽變更','zh-Hans':'预览更改'},
+      'Review the changes below, then back up and sync.': {'zh-Hant':'確認下方變更後，點「備份並同步」。','zh-Hans':'确认下方更改后，点击“备份并同步”。'},
+      'Check differences before syncing.': {'zh-Hant':'檢查差異後即可同步。','zh-Hans':'检查差异后即可同步。'},
+      'Sync preferences': {'zh-Hant':'同步偏好','zh-Hans':'同步偏好'},
+      'Output limit, default model and startup sync': {'zh-Hant':'輸出上限、預設模型與啟動同步','zh-Hans':'输出上限、默认模型与启动同步'},
+      'Optional': {'zh-Hant':'選用','zh-Hans':'可选'},
+      'Enabled': {'zh-Hant':'已啟用','zh-Hans':'已启用'},
+      'Save option changes below before checking differences again.': {'zh-Hant':'請先在下方儲存選項變更，再重新檢查差異。','zh-Hans':'请先在下方保存选项更改，再重新检查差异。'},
       'Follow Strata output limit': {'zh-Hant':'輸出上限跟隨 Strata','zh-Hans':'输出上限跟随 Strata'},
-      'Use the verified server default. If none is available, calculate 30% of context, up to 16,384 tokens.': {'zh-Hant':'採用已確認的伺服器預設值；無固定值時，以上下文的 30% 計算，最多 16,384 tokens。','zh-Hans':'采用已确认的服务器默认值；无固定值时，按上下文的 30% 计算，最多 16,384 tokens。'},
+      'Use the verified server default. If none is available, calculate 30% of context, at least 4,096 and at most 32,768 tokens.': {'zh-Hant':'採用已確認的伺服器預設值；無固定值時，以上下文的 30% 計算，最低 4,096、最高 32,768 tokens。','zh-Hans':'采用已确认的服务器默认值；无固定值时，按上下文的 30% 计算，最低 4,096、最高 32,768 tokens。'},
       'Advanced settings': {'zh-Hant':'進階設定','zh-Hans':'高级设置'},
       'Manual output limit': {'zh-Hant':'手動輸出上限','zh-Hans':'手动输出上限'},
       'Turn off Follow Strata output limit to enter a manual override.': {'zh-Hant':'關閉「輸出上限跟隨 Strata」後，可輸入手動覆寫值。','zh-Hans':'关闭“输出上限跟随 Strata”后，可输入手动覆盖值。'},
@@ -400,6 +407,7 @@ window.__ModuleLoader__.load({
       thresholdRatio: 'Compaction ratio ceiling', retainRatio: 'Recent conversation retention ratio',
     };
     const css = `.strata-sync{max-width:880px;color:inherit;font:inherit;line-height:1.6}.strata-sync *{box-sizing:border-box}.strata-sync header{border-bottom:1px solid #8884;padding-bottom:16px;margin-bottom:20px}.strata-sync h2{margin:0;font-size:22px}.strata-sync .ss-muted{opacity:.72;font-size:13px}.strata-sync .ss-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}.strata-sync label{display:flex;flex-direction:column;gap:5px;font-size:14px}.strata-sync select,.strata-sync input[type=number],.strata-sync textarea{padding:9px;border:1px solid #8886;border-radius:7px;background:transparent;color:inherit;width:100%}.strata-sync textarea{resize:vertical;min-height:112px;font:inherit;line-height:1.5}.strata-sync .ss-prompt-label{margin:12px 0 8px}.strata-sync option{color:#17252b;background:#fff}.strata-sync button{padding:9px 15px;border:1px solid #8885;border-radius:7px;background:transparent;color:inherit;cursor:pointer}.strata-sync button.primary{background:#126c65;border-color:#126c65;color:#fff}.strata-sync button:disabled{opacity:.45;cursor:default}.strata-sync .ss-actions{display:flex;gap:9px;flex-wrap:wrap;margin:18px 0}.strata-sync .ss-check{display:flex;flex-direction:row;align-items:center;margin-top:13px}.strata-sync .ss-card{padding:16px;border:1px solid #8884;border-radius:9px;margin:16px 0}.strata-sync .ss-status{padding:10px 13px;border-left:3px solid #21867b;background:#21867b12;margin:13px 0;overflow-wrap:anywhere}.strata-sync .ss-error{border-color:#ce7140;background:#ce714012}.strata-sync table{width:100%;border-collapse:collapse;font-size:14px}.strata-sync td,.strata-sync th{padding:9px 8px;text-align:left;border-bottom:1px solid #8883;overflow-wrap:anywhere}.strata-sync code{font-size:12px;overflow-wrap:anywhere}.strata-sync .ss-scroll{overflow-x:auto;container-type:inline-size;border:1px solid #8883;border-radius:8px;margin-top:16px}.strata-sync table{table-layout:fixed}.strata-sync th,.strata-sync td{vertical-align:top;padding:12px;line-height:1.5}.strata-sync thead th{font-size:12px;font-weight:600;background:#8881}.strata-sync th:first-child{width:34%}.strata-sync thead th:not(:first-child){width:33%;text-align:right}.strata-sync tbody th{font-weight:500}.strata-sync tbody tr:last-child>*{border-bottom:0}.strata-sync .ss-before,.strata-sync .ss-after{text-align:right;font-variant-numeric:tabular-nums}.strata-sync .ss-before{color:inherit;opacity:.7}.strata-sync .ss-after{background:#21867b0b;font-weight:600}.strata-sync .ss-target{display:block;font-size:11px;font-weight:400;opacity:.65;margin-top:5px;overflow-wrap:anywhere}.strata-sync .ss-values{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.strata-sync .ss-chip{display:inline-block;padding:2px 7px;border:1px solid #8883;border-radius:5px;font-size:12px;font-weight:400;max-width:100%;overflow-wrap:anywhere}.strata-sync .ss-details{text-align:left;font-weight:400;font-size:12px}.strata-sync .ss-details summary{cursor:pointer;overflow-wrap:anywhere}.strata-sync .ss-details pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0;font-size:11px;line-height:1.5}.strata-sync .ss-empty{font-weight:400;font-size:12px;opacity:.65}@container(max-width:440px){.strata-sync tbody th:first-child{width:100%}.strata-sync table,.strata-sync tbody,.strata-sync tr,.strata-sync tbody th,.strata-sync td{display:block;width:100%}.strata-sync thead{display:none}.strata-sync tbody tr{padding:10px 12px;border-bottom:1px solid #8883}.strata-sync tbody th,.strata-sync td{border:0;padding:5px 0}.strata-sync td::before{content:attr(data-label);float:left;font-size:12px;font-weight:400;opacity:.7}.strata-sync td{display:flow-root;padding:7px}.strata-sync .ss-values{max-width:72%;margin-left:auto}.strata-sync .ss-details{margin-top:24px}}`;
+    const workflowCss = ".strata-sync h3{font-size:16px;margin:0 0 8px}.strata-sync .ss-workflow{border:1px solid #21867b66;border-radius:10px;padding:20px;margin-bottom:18px}.strata-sync .ss-workflow>p:first-of-type{margin:0 0 16px}.strata-sync .ss-steps{display:flex;flex-wrap:wrap;gap:10px 20px;list-style:none;margin:0 0 20px;padding:0;font-size:13px}.strata-sync .ss-steps li{display:flex;align-items:center;gap:7px;opacity:.65}.strata-sync .ss-steps li[aria-current]{opacity:1;font-weight:600}.strata-sync .ss-step-number{display:inline-grid;place-items:center;width:25px;height:25px;flex-shrink:0;border:1px solid #8885;border-radius:50%;font-variant-numeric:tabular-nums}.strata-sync [aria-current] .ss-step-number{background:#126c65;color:#fff;border-color:#126c65}.strata-sync .ss-options>summary{cursor:pointer;font-size:14px}.strata-sync .ss-option-title::marker{color:#888}.strata-sync .ss-option-title>span:first-child{font-weight:600}.strata-sync .ss-badge{display:inline-block;margin-left:10px;padding:1px 7px;border:1px solid #8884;border-radius:5px;font-size:11px;vertical-align:middle}.strata-sync .ss-option-description{display:inline-block;margin-left:12px;opacity:.65;font-size:12px}.strata-sync button:focus-visible,.strata-sync summary:focus-visible,.strata-sync select:focus-visible{outline:2px solid #21867b;outline-offset:3px}@media(max-width:520px){.strata-sync .ss-workflow{padding:14px}.strata-sync .ss-option-description{display:block;margin-left:16px;margin-top:3px}.strata-sync .ss-steps{gap:8px 12px}}";
     const fmt = (v) => v == null ? 'Not set' : typeof v === 'number' ? v.toLocaleString('en-US') : typeof v === 'object' ? JSON.stringify(v) : String(v);
     const warningText = {
 INPUT_UNCONFIRMED: 'Input types are missing or unsupported in server metadata. Existing input settings are preserved.',
@@ -500,61 +508,29 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         h('div',null,h('strong',null,outputSource(budget)),h('div',{className:'ss-muted'},t('Output limit source: '))));
       const warnings=(items)=>(items||[]).map((w,i)=>h('div',{key:i,className:'ss-status ss-error'},typeof w==='string'?(t(warningText[w])||(w.startsWith('SLOTS_')?t('Live slot information is unavailable. Using the model context reported by Strata.'):w)):JSON.stringify(w)));
       return h('section',{className:'strata-sync','aria-label':'dsh-strata-sync'},
-        h('style',null,css),
-        h('header',null,h('h2',null,'dsh-strata-sync'),h('p',{className:'ss-muted'},t('Align DSH with the model loaded by Strata Server. The server supplies model, context and any fixed output default; this plugin calculates fallback output and compaction budgets.'))),
+        h('style',null,css+workflowCss),
+        h('header',null,h('h2',null,'dsh-strata-sync'),h('p',{className:'ss-muted'},t('Sync the model and context budgets from Strata Server to DSH.'))),
         !state&&!loadError&&h('div',{className:'ss-status',role:'status'},t('Loading sync settings...')),
-        state?.busy&&h('div',{className:'ss-status',role:'status'},t('DSH is running a task. Synchronization will wait until all tasks are idle.')),
+        state?.busy&&h('div',{className:'ss-status',role:'status'},t('A synchronization is applying settings. Please wait.')),
         (error||loadError)&&h('div',{className:'ss-status ss-error',role:'alert'},diagnostic(error||loadError)),
         notice&&h('div',{className:'ss-status',role:'status'},t(notice)),
         conflict&&h('div',{className:'ss-status ss-error'},
           h('p',null,t('Preferences changed in another window. Reload the latest preferences before saving; this discards your unsaved edits.')),
           h('button',{disabled:pending,onClick:()=>action(()=>refresh(true))},t('Reload latest preferences'))),
+        h('div',{className:'ss-workflow','data-testid':'sync-workflow'},
+          h('h3',null,t('Start here')),
+          h('p',{className:'ss-muted'},t('First, check differences to read the loaded model and preview the changes.')),
+          h('ol',{className:'ss-steps','aria-label':t('Sync the model and context budgets from Strata Server to DSH.')},
+            ...['Check differences','Review changes','Back up and sync'].map((label,index)=>h('li',{key:label,'aria-current':index===(preview?1:result&&!dirty?2:0)?'step':undefined},h('span',{className:'ss-step-number','aria-hidden':true},index+1),t(label)))),
         h('label',null,t('Strata provider'),h('select',{value:form.providerId,onChange:e=>edit({providerId:e.target.value}),disabled:pending||!state},
           h('option',{value:''},t('Choose an existing provider')),...(state?.providers||[]).map(p=>h('option',{key:p.id,value:p.id},p.id)))),
         h('p',{className:'ss-muted'},t('Uses the URL and credentials already configured in DSH. API keys are never displayed or copied here.')),
-        h('div',{className:'ss-card'},
-          h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:!form.manual,'aria-label':t('Follow Strata output limit'),onChange:e=>edit({manual:!e.target.checked}),disabled:pending||!state}),t('Follow Strata output limit')),
-          h('p',{className:'ss-muted'},t('Use the verified server default. If none is available, calculate 30% of context, up to 16,384 tokens.')),
-          activeBudget?outputValues(activeBudget,preview.server?.model):h('p',{className:'ss-muted'},t('Check differences to read the server and effective limits.')),
-          h('details',{className:'ss-details',open:form.manual},h('summary',null,t('Advanced settings')),
-            h('label',null,t('Manual output limit'),h('input',{type:'number',min:1,step:1,value:form.output,onChange:e=>edit({output:e.target.value}),disabled:pending||!state||!form.manual})),
-            h('p',{className:'ss-muted'},t(form.manual?'A manual limit takes priority over the server default and automatic calculation.':'Turn off Follow Strata output limit to enter a manual override.')))),
-        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.follow,onChange:e=>edit({follow:e.target.checked}),disabled:pending||!state}),t('Follow the loaded Strata model as the default')),
-        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.auto,onChange:e=>edit({auto:e.target.checked}),disabled:pending||!state}),t('Automatically sync when DSH starts')),
-        h('p',{className:'ss-muted'},t('Runs once on the next DSH start. Waits for running tasks to finish; no periodic server checks.')),
-        h('div',{className:'ss-card','data-testid':'summary-target'},
-          h('strong',null,t('Dynamic summary target')),
-          h('label',{className:'ss-check'},h('input',{type:'checkbox','data-testid':'summary-guidance-toggle','aria-label':t('Enable summary guidance'),checked:form.summaryGuidance,onChange:e=>edit({summaryGuidance:e.target.checked}),disabled:pending||!state}),t('Enable summary guidance')),
-          h('div',{className:'ss-grid'},
-            h('label',null,t('Output budget divisor (estimated budget ÷ O)'),h('input',{type:'number','data-testid':'summary-output-divisor','aria-label':t('Output budget divisor (estimated budget ÷ O)'),'aria-invalid':!isDivisor(draft.summaryOutputDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summaryOutputDivisor,onChange:e=>edit({summaryOutputDivisor:e.target.value}),disabled:pending||!state})),
-            h('label',null,t('Source length divisor (source estimate ÷ S)'),h('input',{type:'number','data-testid':'summary-source-divisor','aria-label':t('Source length divisor (source estimate ÷ S)'),'aria-invalid':!isDivisor(draft.summarySourceDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summarySourceDivisor,onChange:e=>edit({summarySourceDivisor:e.target.value}),disabled:pending||!state}))),
-          state&&!validDivisor&&h('p',{className:'ss-status ss-error',role:'alert'},t('Enter a finite divisor of at least 1; decimals are allowed.')),
-          h('label',{className:'ss-prompt-label'},t('Supplemental summary prompt'),h('textarea',{'data-testid':'summary-prompt','aria-label':t('Supplemental summary prompt'),'aria-invalid':!validPrompt,rows:5,value:form.summaryPrompt,onChange:e=>edit({summaryPrompt:e.target.value}),disabled:pending||!state,spellCheck:false})),
-          state&&!validPrompt&&h('p',{className:'ss-status ss-error',role:'alert'},t('Use 1–2,048 characters and include {target}.')),
-          h('button',{type:'button','data-testid':'summary-prompt-reset',disabled:pending||!state?.defaultSummaryPromptTemplate||form.summaryPrompt===state.defaultSummaryPromptTemplate,onClick:()=>edit({summaryPrompt:state.defaultSummaryPromptTemplate})},t('Restore default prompt')),
-          h('p',{className:'ss-muted'},t("Appended to DSH's native prompt; {target} becomes the calculated token target. Save preferences to apply.")),
-          !form.summaryGuidance&&h('p',{className:'ss-status','data-testid':'summary-guidance-off'},t('Summary guidance is off. No extra sentence is added to the native prompt.')),
-          summaryTargetCeiling!==null&&(summaryTargetCeiling>=256
-            ? h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens')
-            : h('p',{className:'ss-status','data-testid':'summary-target-native'},t('This preview is below the 256-token minimum. The native summary prompt remains unchanged.'))),
-          h('details',{className:'ss-details','data-testid':'summary-details'},h('summary',null,t('Calculation and limits')),
-            h('p',{className:'ss-muted'},t('Target = floor(min(estimated effective output budget / O, selected content estimate / S)). Default divisors: 2 and 2 (50% each).')),
-            h('p',{className:'ss-muted'},t('The preview uses the proposed summary cap. Actual targets also account for the estimated remaining context and source length; they may be lower.'),' ',t('When guidance cannot be applied, DSH keeps its native summary behavior.')))),
         h('div',{className:'ss-actions'},
-          h('button',{disabled:pending||!state||!form.providerId||!valid||!dirty||conflict,onClick:()=>action(async()=>{
-            const changes=Object.fromEntries(Object.entries(values(formRef.current)).filter(([key,value])=>!Object.is(value,baseline.current.values[key])));
-            const s=await rpc('configure',{...changes,expectedRevision:baseline.current.revision});
-            requestSeq.current++;acceptStatus(s,true);setPreview(null);setNotice('Sync preferences saved.');
-          })},t('Save preferences')),
-          h('button',{disabled:pending||!state||!form.providerId||dirty||conflict||!valid,onClick:()=>action(async()=>{setPreview(await rpc('preview',{providerId:form.providerId}));await refresh();})},pending?t('Working...'):t('Check differences')),
-          h('button',{className:'primary',disabled:pending||!state||dirty||conflict||!preview||state.busy||!preview.changes?.length,onClick:()=>action(async()=>{
-            const r=await rpc('apply',{fingerprint:preview.fingerprint,providerId:form.providerId});
-            const view=r.preview||preview;
-            setResult({at:new Date().toISOString(),modelId:view.server?.model?.id,providerId:view.providerId||form.providerId,budget:view.budget,capabilityStatus:view.capabilityStatus,serverOutputTokens:view.server?.model?.serverOutputTokens,outputLimitStatus:view.server?.model?.outputLimitStatus,backupPath:r.backupPath,applied:r.applied,warnings:view.server?.warnings});
-            setPreview(null);setNotice(r.applied?'Synced and backed up the original settings. Start a new conversation to use the updated compaction policy.':'Settings already match. No changes needed.');await refresh();
-          })},t('Back up and sync'))),
-        dirty&&!conflict&&h('p',{className:'ss-muted'},t('Save preferences before checking for differences.')),
-        preview&&h('div',{className:'ss-card'},
+          h('button',{className:preview?'':'primary','data-testid':'check-differences',disabled:pending||!state||!form.providerId||dirty||conflict||!valid,onClick:()=>action(async()=>{setPreview(await rpc('preview',{providerId:form.providerId}));await refresh();})},pending?t('Working...'):t('Check differences'))),
+        dirty&&!conflict&&h('p',{className:'ss-status'},t('Save option changes below before checking differences again.')),
+        preview&&h('div',{className:'ss-card','data-testid':'sync-preview'},
+          h('h3',null,t('Review changes')),
+          preview.changes?.length>0&&h('p',{className:'ss-muted'},t('Review the changes below, then back up and sync.')),
           h('strong',null,'Strata Server'),h('p',null,h('code',null,preview.server?.model?.id)),
           h('div',{className:'ss-grid'},
             h('div',null,h('strong',null,format(preview.budget?.contextWindow)),h('div',{className:'ss-muted'},t('Context tokens'))),
@@ -575,6 +551,14 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           !preview.changes?.length&&alignment(preview),
           h('p',null,t('Effective compaction threshold: '),format(preview.budget?.thresholdTokens),' tokens (',preview.budget?.thresholdPercent?.toFixed(2),'%)'),
           h('p',{className:'ss-muted'},t('Only DSH settings are updated. Sync does not switch server models, change Strata configuration, or send inference requests. Start a new conversation after syncing.'))),
+        h('div',{className:'ss-actions','data-testid':'sync-apply'},
+          h('button',{className:preview?.changes?.length?'primary':'',disabled:pending||!state||dirty||conflict||!preview||state.busy||!preview.changes?.length,onClick:()=>action(async()=>{
+            const r=await rpc('apply',{fingerprint:preview.fingerprint,providerId:form.providerId});
+            const view=r.preview||preview;
+            setResult({at:new Date().toISOString(),modelId:view.server?.model?.id,providerId:view.providerId||form.providerId,budget:view.budget,capabilityStatus:view.capabilityStatus,serverOutputTokens:view.server?.model?.serverOutputTokens,outputLimitStatus:view.server?.model?.outputLimitStatus,backupPath:r.backupPath,applied:r.applied,warnings:view.server?.warnings});
+            setPreview(null);setNotice(r.applied?'Synced and backed up the original settings. Start a new conversation to use the updated compaction policy.':'Settings already match. No changes needed.');await refresh();
+          })},t('Back up and sync'))),
+        !preview&&!result&&h('p',{className:'ss-muted'},t('Check differences before syncing.'))),
         displayedResult?.budget&&h('div',{className:'ss-card','data-testid':'sync-result'},
           h('strong',null,t('Latest synchronization result')),h('p',{className:'ss-muted'},t('This records the last synchronization, not a live server check.')),
           h('p',null,t('Model'),': ',h('code',null,displayedResult.modelId)),h('p',null,t('Context window'),': ',format(displayedResult.budget.contextWindow)),
@@ -582,6 +566,41 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           h('p',null,t(displayedResult.backupPath?'Backup created':'No settings changed; no new backup was needed.')),
           displayedResult.backupPath&&h('p',{className:'ss-muted'},t('Original settings backup: '),h('code',null,displayedResult.backupPath)),
           h('p',{className:'ss-muted'},t('Last sync: '),format(displayedResult.at)),...warnings(displayedResult.warnings)),
+        h('details',{className:'ss-card ss-options','data-testid':'sync-preferences'},
+          h('summary',{className:'ss-option-title'},h('span',null,t('Sync preferences')),h('span',{className:'ss-option-description'},t('Output limit, default model and startup sync'))),
+        h('div',{className:'ss-card'},
+          h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:!form.manual,'aria-label':t('Follow Strata output limit'),onChange:e=>edit({manual:!e.target.checked}),disabled:pending||!state}),t('Follow Strata output limit')),
+          h('p',{className:'ss-muted'},t('Use the verified server default. If none is available, calculate 30% of context, at least 4,096 and at most 32,768 tokens.')),
+          activeBudget?outputValues(activeBudget,preview.server?.model):h('p',{className:'ss-muted'},t('Check differences to read the server and effective limits.')),
+          h('details',{className:'ss-details',open:form.manual},h('summary',null,t('Advanced settings')),
+            h('label',null,t('Manual output limit'),h('input',{type:'number',min:1,step:1,value:form.output,onChange:e=>edit({output:e.target.value}),disabled:pending||!state||!form.manual})),
+            h('p',{className:'ss-muted'},t(form.manual?'A manual limit takes priority over the server default and automatic calculation.':'Turn off Follow Strata output limit to enter a manual override.')))),
+        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.follow,onChange:e=>edit({follow:e.target.checked}),disabled:pending||!state}),t('Follow the loaded Strata model as the default')),
+        h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.auto,onChange:e=>edit({auto:e.target.checked}),disabled:pending||!state}),t('Automatically sync when DSH starts')),
+        h('p',{className:'ss-muted'},t('Runs once on the next DSH start; no periodic server checks.'))),
+        h('details',{className:'ss-card ss-options','data-testid':'summary-target'},
+          h('summary',{className:'ss-option-title'},h('span',null,t('Dynamic summary target')),h('span',{className:'ss-badge'},t(form.summaryGuidance?'Enabled':'Optional'))),
+          h('label',{className:'ss-check'},h('input',{type:'checkbox','data-testid':'summary-guidance-toggle','aria-label':t('Enable summary guidance'),checked:form.summaryGuidance,onChange:e=>edit({summaryGuidance:e.target.checked}),disabled:pending||!state}),t('Enable summary guidance')),
+          h('div',{className:'ss-grid'},
+            h('label',null,t('Output budget divisor (estimated budget ÷ O)'),h('input',{type:'number','data-testid':'summary-output-divisor','aria-label':t('Output budget divisor (estimated budget ÷ O)'),'aria-invalid':!isDivisor(draft.summaryOutputDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summaryOutputDivisor,onChange:e=>edit({summaryOutputDivisor:e.target.value}),disabled:pending||!state})),
+            h('label',null,t('Source length divisor (source estimate ÷ S)'),h('input',{type:'number','data-testid':'summary-source-divisor','aria-label':t('Source length divisor (source estimate ÷ S)'),'aria-invalid':!isDivisor(draft.summarySourceDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summarySourceDivisor,onChange:e=>edit({summarySourceDivisor:e.target.value}),disabled:pending||!state}))),
+          state&&!validDivisor&&h('p',{className:'ss-status ss-error',role:'alert'},t('Enter a finite divisor of at least 1; decimals are allowed.')),
+          h('label',{className:'ss-prompt-label'},t('Supplemental summary prompt'),h('textarea',{'data-testid':'summary-prompt','aria-label':t('Supplemental summary prompt'),'aria-invalid':!validPrompt,rows:5,value:form.summaryPrompt,onChange:e=>edit({summaryPrompt:e.target.value}),disabled:pending||!state,spellCheck:false})),
+          state&&!validPrompt&&h('p',{className:'ss-status ss-error',role:'alert'},t('Use 1–2,048 characters and include {target}.')),
+          h('button',{type:'button','data-testid':'summary-prompt-reset',disabled:pending||!state?.defaultSummaryPromptTemplate||form.summaryPrompt===state.defaultSummaryPromptTemplate,onClick:()=>edit({summaryPrompt:state.defaultSummaryPromptTemplate})},t('Restore default prompt')),
+          h('p',{className:'ss-muted'},t("Appended to DSH's native prompt; {target} becomes the calculated token target. Save preferences to apply.")),
+          summaryTargetCeiling!==null&&(summaryTargetCeiling>=256
+            ? h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens')
+            : h('p',{className:'ss-status','data-testid':'summary-target-native'},t('This preview is below the 256-token minimum. The native summary prompt remains unchanged.'))),
+          h('details',{className:'ss-details','data-testid':'summary-details'},h('summary',null,t('Calculation and limits')),
+            h('p',{className:'ss-muted'},t('Target = floor(min(estimated effective output budget / O, selected content estimate / S)). Default divisors: 2 and 2 (50% each).')),
+            h('p',{className:'ss-muted'},t('The preview uses the proposed summary cap. Actual targets also account for the estimated remaining context and source length; they may be lower.'),' ',t('When guidance cannot be applied, DSH keeps its native summary behavior.')))),
+        h('div',{className:'ss-actions'},
+          h('button',{className:dirty?'primary':'',disabled:pending||!state||!form.providerId||!valid||!dirty||conflict,onClick:()=>action(async()=>{
+            const changes=Object.fromEntries(Object.entries(values(formRef.current)).filter(([key,value])=>!Object.is(value,baseline.current.values[key])));
+            const s=await rpc('configure',{...changes,expectedRevision:baseline.current.revision});
+            requestSeq.current++;acceptStatus(s,true);setPreview(null);setNotice('Sync preferences saved.');
+          })},t('Save preferences'))),
         state?.lastError&&h('div',{className:'ss-status ss-error'},diagnostic(typeof state.lastError==='string'?state.lastError:state.lastError.message)));
     }
     function apply(ctx) {

@@ -1,6 +1,6 @@
 # Verified model capabilities
 
-Capability synchronization uses the preview, backup, rollback and idle-only synchronization workflow. It does not send generation requests or alter Strata Server.
+Capability synchronization uses the preview, backup, rollback and coordinated configuration-write workflow. It does not send generation requests or alter Strata Server.
 
 ## Input types
 

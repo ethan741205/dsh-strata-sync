@@ -49,14 +49,29 @@ test('32K corrects the native invalid 65536 headroom with a valid policy', () =>
 });
 
 test('64K, 8K, and custom output budgets remain internally consistent', () => {
-  assert.equal(planBudget(65536).outputTokens, 16384);
-  assert.equal(planBudget(65536).thresholdTokens, 45056);
+  assert.equal(planBudget(65536).outputTokens, 19660);
+  assert.equal(planBudget(65536).thresholdTokens, 41780);
   for (const p of [planBudget(8192), planBudget(65536), planBudget(32768, { outputTokens: 4096 })]) {
     assert.ok(p.thresholdTokens > p.retainTokens);
     assert.ok(p.thresholdTokens + p.outputTokens + p.headroomTokens <= p.contextWindow);
   }
   for (const value of [4096, -1, 0, NaN, Infinity, 32768.1]) assert.throws(() => planBudget(value), errorCode('UNSUPPORTED_CONTEXT'));
   for (const value of [0, -1, 30000, 32768, 1.5]) assert.throws(() => planBudget(32768, { outputTokens: value }), errorCode('INVALID_OUTPUT_BUDGET'));
+});
+
+test('automatic output budget matches Strata floor, ratio and ceiling without overriding server or manual limits', () => {
+  for (const [context, output] of [[8192,4096],[12288,4096],[16384,4915],[32768,9830],[65536,19660],[109226,32767],[109227,32768],[131072,32768],[1048576,32768]]) {
+    const p=planBudget(context);
+    assert.equal(p.outputTokens,output);
+    assert.equal(p.outputSource,'calculated');
+    assert.ok(p.thresholdTokens>p.retainTokens);
+    assert.ok(p.thresholdTokens+p.outputTokens+p.headroomTokens<=context);
+    if(context>=12288)assert.equal(p.headroomTokens,4096);
+  }
+  assert.equal(planBudget(8192).headroomTokens,2048);
+  assert.equal(planBudget(32768,{serverOutputTokens:2048}).outputTokens,2048);
+  assert.equal(planBudget(131072,{serverOutputTokens:40000}).outputTokens,40000);
+  assert.equal(planBudget(131072,{serverOutputTokens:40000,outputTokens:50000}).outputTokens,50000);
 });
 
 test('discovery only reads metadata and sends credentials without returning them', async () => {
@@ -231,7 +246,7 @@ test('malformed JSON, oversized payloads, and redirects fail without leaking bod
 
 test('network errors and credential validation do not expose credentials', async () => {
   await assert.rejects(discoverStrata('https://strata.test', 'private-api-key', { fetch: async () => { throw new Error('private-api-key'); } }), error => error.code === 'CONNECTION_FAILED' && !error.message.includes('private-api-key'));
-  await assert.rejects(discoverStrata('https://strata.test', 'bad\r\nkey'), errorCode('INVALID_CREDENTIAL'));
+  await assert.rejects(discoverStrata('https://strata.test', 'bad\nkey'), errorCode('INVALID_CREDENTIAL'));
 });
 
 test('timeout aborts the metadata fetch', async () => {

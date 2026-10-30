@@ -11,7 +11,7 @@ The plugin reads Strata's model information, previews the changes, and updates D
 - **Sync model settings:** context window, response output limit, and confirmed input types and reasoning levels.
 - **Align compaction budgets:** update the matching policies in enabled DSH Agent presets.
 - **Control summary length:** edit the supplemental prompt and adjust two target-length ratios.
-- **Sync on startup:** optionally synchronize once after DSH becomes idle.
+- **Sync on startup:** optionally synchronize once when DSH starts.
 - **Review and recover:** preview differences, back up settings, and view the last synchronization result.
 
 Strata Server is read-only to this plugin. Synchronization does not switch or load server models, change server settings, or send test inference requests. Unconfirmed model capabilities keep their existing DSH values.
@@ -44,26 +44,30 @@ Reopen DSH if needed to load the settings page. If the plugin is disabled, enabl
 
 Open **Settings → dsh-strata-sync**:
 
+The main flow appears first: **Check differences → Review changes → Back up and sync**. **Sync preferences** and the optional **Dynamic summary target** are collapsed below it; expand them to adjust options or edit the supplemental prompt.
+
 1. Select your Strata provider and click **Save preferences**.
 2. Click **Check differences** to inspect the loaded model and proposed changes.
-3. While DSH is idle, click **Back up and sync**.
+3. Click **Back up and sync**.
 4. **Start a new conversation** to use the updated model and Agent preset settings.
 
-Existing conversations keep their selected model route and preset revision. To make future setup automatic, enable **Automatically sync when DSH starts** and save. This option is off by default and takes effect on the next start; it waits for idle and does not poll continuously.
+Existing conversations keep their selected model route and preset revision. To make future setup automatic, enable **Automatically sync when DSH starts** and save. This option is off by default and takes effect on the next start; it can run during tasks and does not poll continuously.
 
 ## Model and output settings
 
 | Setting | How it is chosen |
 |---|---|
 | Model and context | Strata's loaded text model and verified context capacity. |
-| Response output limit | Manual override, if set; otherwise the verified Strata output default. If unavailable or unlimited, use 30% of context, capped at 16,384 tokens. |
+| Response output limit | Manual override, if set; otherwise the verified Strata output default. If unavailable or unlimited, use Strata's formula: 30% of context, at least 4,096 and at most 32,768 tokens. |
 | Input types | Confirmed server capabilities, such as text or text plus image. |
 | Reasoning levels | Verified model-template support; unknown templates preserve existing settings. |
 | Default model | Follows the loaded Strata model when **Follow the loaded Strata model as the default** is enabled. |
 
 Keep **Follow Strata output limit** enabled for automatic selection. Turn it off to set a manual override under **Advanced settings**. The preview shows the server default, effective value and source separately.
 
-When synchronizing, the plugin sets a 4,096-token summary output cap and 4,096-token compaction headroom. The effective compaction trigger is the smaller of **80% of context** and **context − response output − 4,096**. Recent-content retention is **(context − response output) × 16%**, rounded down. These are client-side budgets calculated by the plugin, not settings supplied by Strata.
+The fallback follows [Strata's local output formula](https://github.com/Niko1221/Strata/blob/main/apps/host/server/agent/profile.mjs): `max(4096, min(32768, floor(context × 0.3)))`.
+
+When synchronizing, the plugin normally sets a 4,096-token summary output cap and compaction headroom. For small windows using calculated output, both are limited to half the remaining conversation budget, rounded down; an 8K window therefore uses 2,048. The effective compaction trigger is the smaller of **80% of context** and **context − response output − headroom**. Recent-content retention is **(context − response output) × 16%**, rounded down. These compaction budgets are calculated by the plugin, not supplied by Strata.
 
 For example, with automatic output calculation, a 32K context uses a 9,830-token response allowance and an 18,842-token compaction trigger. It does **not** necessarily compact at 80%.
 

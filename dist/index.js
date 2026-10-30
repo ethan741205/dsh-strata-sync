@@ -5,7 +5,7 @@ import z from '@deepseek-ai/schemastery';
 import { discoverStrata, planBudget, StrataSyncError } from './core.mjs';
 import { DEFAULT_SUMMARY_TEMPLATE, validSummaryDivisor, validSummaryTemplate, installSummaryGuidance } from './summary.mjs';
 
-export const inject = ['configEditor', 'connection', 'agents', 'credentials', 'agentPresets'];
+export const inject = ['configEditor', 'connection', 'credentials', 'agentPresets'];
 export const Config = z.object({
   providerId: z.string().default(''),
   autoSync: z.boolean().default(false),
@@ -134,10 +134,6 @@ export function apply(ctx, initialConfig) {
     if (candidates.length !== 1) refuse('provider-required', 'Choose which existing provider connects to Strata Server.');
     return candidates[0];
   }
-  function busy() {
-    // DSH 0.2.1-rc.3 reports maintenance as idle while manual compaction can still run.
-    return ctx.agents.list().some((agent) => agent.status !== 'idle' || agent.phase?.kind === 'maintenance');
-  }
   function refreshSettings() {
     settings = { providerId: '', autoSync: false, followLoadedModel: true, ...entry(PACKAGE).options.config };
   }
@@ -160,7 +156,8 @@ export function apply(ctx, initialConfig) {
       });
     } catch { /* The page remains usable when the required provider is absent. */ }
     return { ...publicSettings(), defaultSummaryPromptTemplate: DEFAULT_SUMMARY_TEMPLATE, settingsRevision: hash(publicSettings()),
-      busy: busy() || !!writeBarrier, providers, lastPreview, lastApplied, lastError };
+      // UI busy describes a configuration write, never a running Agent task.
+      busy: !!writeBarrier, providers, lastPreview, lastApplied, lastError };
   }
   async function credential(providerId, route) {
     if (route.apiKeyEnv) {
@@ -272,7 +269,7 @@ export function apply(ctx, initialConfig) {
     const warnings = [...discovered.warnings ?? [], ...(before.owners.some((owner) => owner.targets.some((target) => target.config.auto === false)) ? ['DSH_AUTO_COMPACTION_DISABLED'] : [])];
     const presetIds = before.owners.flatMap((owner) => owner.presetId ? [owner.presetId] : []);
     const view = { providerId, server: { baseURL: discovered.baseURL, model: discovered.model, warnings }, budget, current, compactions, capabilityEdits, capabilityStatus,
-      presetIds, needsNewConversation: presetIds.length > 0, changes, fingerprint, busy: busy() };
+      presetIds, needsNewConversation: presetIds.length > 0, changes, fingerprint, busy: !!writeBarrier };
     previewSnapshots.set(view, before);
     lastPreview = view;
     lastError = null;
@@ -302,7 +299,7 @@ export function apply(ctx, initialConfig) {
     ensureOpen();
     payload(request, ['fingerprint', 'providerId', 'outputTokens']);
     if (typeof request.fingerprint !== 'string' || !request.fingerprint) refuse('preview-required', 'Preview the proposed changes before applying them.');
-    if (busy()) refuse('busy', 'A DSH task is running. Wait until all tasks are idle before syncing.');
+
     const view = await preview({ ...(request.providerId ? { providerId: request.providerId } : {}), ...(own(request, 'outputTokens') ? { outputTokens: request.outputTokens } : {}) });
     ensureOpen();
     if (view.fingerprint !== request.fingerprint) refuse('stale-preview', 'The server or DSH settings changed. Review a fresh preview.');
@@ -312,7 +309,7 @@ export function apply(ctx, initialConfig) {
       lastApplied = appliedSummary(view, null, false);
       return { applied: false, backupPath: null, preview: view };
     }
-    if (busy()) refuse('busy', 'A DSH task started. Sync has been deferred.');
+
     writeBarrier = new Promise((resolve) => { releaseWrite = resolve; });
     let backupPath;
     const completed = [];
@@ -320,7 +317,7 @@ export function apply(ctx, initialConfig) {
       backupPath = await backup();
       ensureOpen();
       assertSnapshot(before);
-      if (busy()) refuse('busy', 'A DSH task started. Sync has been deferred.');
+
       const modelId = view.server.model.id;
       const llmNext = clone(before.llm);
       const route = llmNext.providers[view.providerId];
@@ -354,7 +351,7 @@ export function apply(ctx, initialConfig) {
         if (hash(original) === hash(next)) continue;
         await ctx.configEditor.edit(entry(name, id), (current) => {
           ensureOpen();
-          if (busy()) refuse('busy', 'A DSH task started. Sync has been deferred.');
+
           // ConfigEditor may queue this callback behind another settings edit.
           // Recheck every owner when our first write actually begins.
           if (completed.length === 0) assertSnapshot(before);
@@ -393,7 +390,7 @@ export function apply(ctx, initialConfig) {
     if (typeof request.expectedRevision !== 'string' || request.expectedRevision !== hash(publicSettings())) {
       refuse('stale-settings', 'Sync preferences changed. Reload the latest preferences before saving.');
     }
-    if (busy()) refuse('busy', 'Wait until all DSH tasks are idle before changing sync settings.');
+
     const next = { ...settings };
     if (own(request, 'providerId')) {
       if (typeof request.providerId !== 'string') refuse('invalid-request', 'Provider must be a string.');
@@ -432,7 +429,7 @@ export function apply(ctx, initialConfig) {
       if (hash(current) !== hash(original) || hash(publicSettings(current)) !== request.expectedRevision) {
         refuse('stale-settings', 'Sync preferences changed while saving. Reload the latest preferences.');
       }
-      if (busy()) refuse('busy', 'Wait until all DSH tasks are idle before changing sync settings.');
+
       return next;
     });
     settings = next;
@@ -517,7 +514,7 @@ export function apply(ctx, initialConfig) {
     try {
       refreshSettings();
       if (!settings.autoSync) { startup.pending = false; clearInterval(timer); return; }
-      if (busy() || inFlight || startup.running) return;
+      if (inFlight || startup.running) return;
     } catch (error) {
       // The host can withdraw a required entry during reload. Do not leave an
       // unhandled timer rejection or retry an unsupported profile indefinitely.
@@ -526,7 +523,7 @@ export function apply(ctx, initialConfig) {
       clearInterval(timer);
       return;
     }
-    // Discovery can outlive an idle period. Busy/disposed attempts keep the one
+    // Concurrent sync/disposed attempts keep the one
     // startup operation pending; successful/no-op and terminal errors consume it.
     startup.running = true;
     let deferred = false;
@@ -548,7 +545,7 @@ export function apply(ctx, initialConfig) {
   // edits are rejected as nested HMR transactions. Mirror Hmr.watchConfig():
   // detach only timer creation, while every write still uses ConfigEditor and
   // its normal runExclusive queue. `executing` is a version-specific host seam.
-  // This timer only waits for startup readiness/idle; no recurring server polling.
+  // This timer only waits for startup readiness; no recurring server polling.
   const createTimer = () => setInterval(() => { void poll(); }, 1_000);
   const executing = ctx.get('hmr')?.executing;
   if (startup.pending) timer = typeof executing?.exit === 'function' ? executing.exit(createTimer) : createTimer();

@@ -59,18 +59,21 @@ export function normalizeBaseURL(value) {
 
 /**
  * Select the output allowance, then derive DSH's client-side compaction policy.
- * The 4096 headroom also matches the native pi-ai context safety margin.
+ * The usual 4096 headroom also matches the native pi-ai context safety margin.
  */
 export function planBudget(contextWindow, { outputTokens, serverOutputTokens } = {}) {
   if (!isContext(contextWindow) || contextWindow < 8192) {
     fail('UNSUPPORTED_CONTEXT', 'A verified context window of at least 8,192 tokens is required.');
   }
-  const output = outputTokens ?? serverOutputTokens ?? Math.min(16384, Math.floor(contextWindow * 0.3));
+  const output = outputTokens ?? serverOutputTokens ?? Math.max(4096, Math.min(32768, Math.floor(contextWindow * 0.3)));
   const outputSource = outputTokens != null ? 'manual' : serverOutputTokens != null ? 'server' : 'calculated';
   if (!Number.isSafeInteger(output) || output < 1 || output >= contextWindow) {
     fail('INVALID_OUTPUT_BUDGET', 'The output budget must be a positive integer smaller than the context window.');
   }
-  const headroomTokens = 4096;
+  // The 4K output floor must still leave compaction room in an 8K window.
+  // Keep fixed/manual budgets and the usual 4K reserve unchanged.
+  const headroomTokens = outputSource === 'calculated'
+    ? Math.min(4096, Math.floor((contextWindow - output) / 2)) : 4096;
   const thresholdRatio = 0.8;
   const retainRatio = 0.16;
   const messageBudgetTokens = contextWindow - output;
@@ -207,7 +210,7 @@ function slotContext(payload, modelIds, loadedCount) {
  */
 export async function discoverStrata(baseURL, apiKey = '', options = {}) {
   const normalized = normalizeBaseURL(baseURL);
-  if (typeof apiKey !== 'string' || apiKey.length > 8192 || /[\r\n\u0000]/u.test(apiKey)) {
+  if (typeof apiKey !== 'string' || apiKey.length > 8192 || /[\n\u0000]/u.test(apiKey)) {
     fail('INVALID_CREDENTIAL', 'The API key contains invalid characters.');
   }
   const fetchImpl = options.fetch ?? globalThis.fetch;
@@ -259,7 +262,7 @@ export async function discoverStrata(baseURL, apiKey = '', options = {}) {
       verifiedStrata: typeof props.build_info === 'string' && /^Strata \d+\.\d+(?:\.\d+)?(?:\b|$)/u.test(props.build_info),
       modelMatched: selectedIds.has(props.model_alias),
       templateHash: typeof props.chat_template === 'string'
-        ? createHash('sha256').update(props.chat_template.replace(/\r\n/g, '\n')).digest('hex') : null,
+        ? createHash('sha256').update(props.chat_template.replace(/\n/g, '\n')).digest('hex') : null,
     };
   } catch { /* Optional metadata: preserve reasoning and calculate output on failure. */ }
   let serverOutputTokens = null;

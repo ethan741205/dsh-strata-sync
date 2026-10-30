@@ -92,7 +92,7 @@ async function harness(options = {}) {
         writes++;
       },
     },
-    agents: { list: () => running ? [{ status: 'running' }] : [] },
+    agents: { list: () => running ? [typeof running==='object'?running:{ status: 'running' }] : [] },
     agentPresets: { resolve: async id => ({ id, ...(options.presetBrokenAfterWrite && writes >= 2 ? { broken: 'private diagnostic' } : {}) }) },
     get: name => name === 'hmr' && options.hmrStore ? { executing: options.hmrStore } : undefined,
     credentials: { resolve: async () => ({ value: 'do-not-expose-test-secret' }) },
@@ -118,7 +118,7 @@ async function harness(options = {}) {
     return (await response.json()).result;
   };
   const dispose = () => { for (const cleanup of effects.splice(0)) cleanup?.(); };
-  return { call, raw, entries, ctx, dispose, stream: (options, next) => callbacks['llm/stream'](options, next), get requests() { return requests; }, get writes() { return writes; },
+  return { call, raw, entries, ctx, dispose, preStep: next => callbacks['agent/pre-step']({},next), stream: (options, next) => callbacks['llm/stream'](options, next), get requests() { return requests; }, get writes() { return writes; },
     reload: () => { dispose(); poll=undefined; apply(ctx, entries[3].options.config); }, setRunning: value => { running = value; },
     poll: async () => { poll?.(); for (let i = 0; i < 25; i++) { await new Promise(resolve => setTimeout(resolve, 5)); } },
     backupCount: async () => { try { return (await readdir(join(dir, 'backups', 'strata-sync'))).length; } catch { return 0; } },
@@ -336,13 +336,14 @@ test('safe discovery errors keep their category without leaking provider respons
   } finally { await h.close(); }
 });
 
-test('busy task prevents application and backup creation', async () => {
+test('running tasks allow synchronization with backup', async () => {
   const h = await harness(); try {
     const p = (await h.call('preview')).value;
     h.setRunning(true);
     const result = await h.call('apply', { fingerprint: p.fingerprint });
-    assert.equal(result.ok, false); assert.equal(result.error.code, 'busy');
-    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
+    assert.equal(result.ok, true);
+    assert.ok(h.writes > 0); assert.equal(await h.backupCount(), 1);
+    assert.equal((await h.call('status')).value.busy,false);
   } finally { await h.close(); }
 });
 
@@ -354,6 +355,61 @@ test('stale preview fails after a concurrent model setting change', async () => 
     assert.equal(result.ok, false); assert.equal(result.error.code, 'stale-preview');
     assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
   } finally { await h.close(); }
+});
+
+for (const purpose of ['generation','compaction']) test(`sync during a suspended ${purpose} stream preserves its request and completion`, async () => {
+  const h=await harness({presets:['standard'],props:verifiedProps});
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  let stream;
+  try {
+    h.setRunning(purpose==='compaction'?{status:'idle',phase:{kind:'maintenance'}}:true);
+    const request=await summaryRequest(purpose==='generation'?{purpose:'generation'}:{});
+    const original=structuredClone(request);
+    stream=h.stream(request,async function*(){yield 'first';await gate;yield 'last';});
+    assert.equal((await stream.next()).value,'first');
+    const inFlight=structuredClone(request);
+    const view=(await h.call('preview')).value;
+    const result=await h.call('apply',{fingerprint:view.fingerprint});
+    assert.equal(result.ok,true);
+    assert.equal(await h.backupCount(),1);
+    assert.deepEqual(request,inFlight);
+    release();
+    assert.equal((await stream.next()).value,'last');
+    assert.equal((await stream.next()).done,true);
+    assert.deepEqual(request,original);
+    const status=(await h.call('status')).value;
+    assert.equal(status.busy,false);
+    const saved=await h.call('configure',{summaryOutputDivisor:3,expectedRevision:status.settingsRevision});
+    assert.equal(saved.ok,true);
+  } finally {release();await stream?.return();await h.close();}
+});
+
+for (const fail of [false,true]) test(`write barrier and sync exclusion survive ${fail?'rollback':'successful writes'}`, async () => {
+  let entered,release;
+  const started=new Promise(resolve=>{entered=resolve;});
+  const gate=new Promise(resolve=>{release=resolve;});
+  let first=true;
+  const h=await harness({rejectCompaction:fail,beforeEdit:async()=>{if(first){first=false;entered();await gate;}}});
+  let nextStep,applying;
+  try {
+    h.setRunning(true);
+    const view=(await h.call('preview')).value;
+    applying=h.call('apply',{fingerprint:view.fingerprint});
+    await started;
+    assert.equal((await h.call('status')).value.busy,true);
+    const other=await h.call('apply',{fingerprint:view.fingerprint});
+    assert.equal(other.error.code,'busy');
+    let stepped=false;
+    nextStep=h.preStep(()=>{stepped=true;});
+    await Promise.resolve();assert.equal(stepped,false);
+    release();
+    const result=await applying;await nextStep;
+    assert.equal(result.ok,!fail);
+    assert.equal(stepped,true);
+    assert.equal((await h.call('status')).value.busy,false);
+    if(fail)assert.equal(h.entries[0].options.config.providers['strata-server'].models[0].contextWindow,65536);
+  } finally {release();await applying;await nextStep;await h.close();}
 });
 
 test('apply preserves credentials, reasoning, other models and unrelated policies', async () => {
@@ -425,10 +481,9 @@ test('a failed second config write rolls the first config back', async () => {
   } finally { await h.close(); }
 });
 
-test('startup sync waits for idle and performs no further server reads', async () => {
+test('startup sync runs during tasks and performs no further server reads', async () => {
   const h = await harness({ autoSync: true }); try {
-    h.setRunning(true); await h.poll(); assert.equal(h.requests, 0);
-    h.setRunning(false); await h.poll(); assert.equal(await h.backupCount(), 1);
+    h.setRunning(true); await h.poll(); assert.equal(await h.backupCount(), 1);
     const writes = h.writes, requests = h.requests;
     await h.poll(); assert.equal(await h.backupCount(), 1); assert.equal(h.writes, writes); assert.equal(h.requests,requests);
   } finally { await h.close(); }
@@ -612,28 +667,23 @@ test('all owner snapshots are rechecked when the first queued write starts', asy
   } finally { await h.close(); }
 });
 
-test('a task starting before the queued write defers without changing configuration', async () => {
+test('a task starting before the queued write does not prevent synchronization', async () => {
   let h;
   h = await harness({ beforeEdit: async () => { h.setRunning(true); } });
   try {
     const first = (await h.call('preview')).value;
     const result = await h.call('apply', { fingerprint: first.fingerprint });
-    assert.equal(result.error.code, 'busy'); assert.equal(h.writes, 0);
+    assert.equal(result.ok,true); assert.ok(h.writes>0);
   } finally { await h.close(); }
 });
 
-test('startup discovery interrupted by a new task completes once after returning to idle', async () => {
+test('startup discovery completes once even when a task starts during discovery', async () => {
   let h, first = true;
   h = await harness({ autoSync: true, beforeFetch: async url => {
     if (first && url.endsWith('/models')) { first = false; h.setRunning(true); }
   } });
   try {
     await h.poll();
-    assert.equal((await h.call('status')).value.lastError.code, 'busy');
-    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
-    const busyRequests = h.requests;
-    await h.poll(); assert.equal(h.requests, busyRequests);
-    h.setRunning(false); await h.poll();
     assert.equal((await h.call('status')).value.lastError, null);
     assert.equal(await h.backupCount(), 1);
     assert.equal(h.entries[0].options.config.providers['strata-server'].models[0].contextWindow, 32768);
