@@ -610,7 +610,24 @@ export function apply(ctx, initialConfig) {
   const createMonitor = () => setInterval(monitorModel, 60_000);
   const monitorTimer = typeof executing?.exit === 'function' ? executing.exit(createMonitor) : createMonitor();
   monitorTimer?.unref?.();
+  let initialTimer;
+  const initialCheck = async () => {
+    initialTimer = undefined;
+    // Yield activation so the host can register the plugin's active entries.
+    // A manual check/startup sync may already have supplied a current result.
+    if (closed || liveCheck.checkedAt) return;
+    await monitorModel();
+    // A configuration operation can briefly defer this first read. Retry once
+    // the host is free instead of losing the check until the 60-second tick.
+    if (!closed && !liveCheck.checkedAt) {
+      initialTimer = setTimeout(initialCheck, 1_000);
+      initialTimer.unref?.();
+    }
+  };
+  const createInitialCheck = () => setTimeout(initialCheck, 0);
+  initialTimer = typeof executing?.exit === 'function' ? executing.exit(createInitialCheck) : createInitialCheck();
+  initialTimer.unref?.();
   ctx.effect(() => () => {
-    closed = true; clearInterval(timer); clearInterval(monitorTimer); monitorAbort.abort(); releaseWrite?.();
+    closed = true; clearTimeout(initialTimer); clearInterval(timer); clearInterval(monitorTimer); monitorAbort.abort(); releaseWrite?.();
   }, 'strata-sync: startup and monitor lifetime');
 }

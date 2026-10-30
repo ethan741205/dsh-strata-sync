@@ -58,11 +58,21 @@ async function harness(options = {}) {
   }
   let requests = 0, writes = 0;
   const timers = new Map();
+  const initialTimers = new Map();
   const routes = new Map();
   let running = false;
   const effects = [];
   const callbacks = {};
   const realInterval = globalThis.setInterval, realClear = globalThis.clearInterval, realFetch = globalThis.fetch;
+  const realTimeout = globalThis.setTimeout, realClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = (fn, delay, ...args) => {
+    if (delay !== 0 && delay !== 1000) return realTimeout(fn, delay, ...args);
+    const scope = AsyncLocalStorage.snapshot();
+    const timer = { unref() {} };
+    initialTimers.set(timer, { run: () => { initialTimers.delete(timer); return scope(fn, ...args); }, delay });
+    return timer;
+  };
+  globalThis.clearTimeout = timer => { if (!initialTimers.delete(timer)) realClearTimeout(timer); };
   globalThis.setInterval = (fn, delay) => {
     // Real timers retain the AsyncLocalStorage context of their creation site.
     const scope = AsyncLocalStorage.snapshot();
@@ -126,8 +136,10 @@ async function harness(options = {}) {
     poll: async () => { for (const timer of timers.values()) if (timer.delay === 1000) timer.run(); for (let i = 0; i < 25; i++) { await new Promise(resolve => setTimeout(resolve, 5)); } },
     monitor: async () => { for (const timer of [...timers.values()]) if (timer.delay === 60000) await timer.run(); },
     timerCount: () => timers.size,
+    initialDelays: () => [...initialTimers.values()].map(timer => timer.delay),
+    firstCheck: async () => { for (const timer of [...initialTimers.values()]) await timer.run(); },
     backupCount: async () => { try { return (await readdir(join(dir, 'backups', 'strata-sync'))).length; } catch { return 0; } },
-    close: async () => { dispose(); globalThis.setInterval = realInterval; globalThis.clearInterval = realClear; globalThis.fetch = realFetch; await rm(dir, { recursive: true, force: true }); },
+    close: async () => { dispose(); globalThis.setInterval = realInterval; globalThis.clearInterval = realClear; globalThis.setTimeout = realTimeout; globalThis.clearTimeout = realClearTimeout; globalThis.fetch = realFetch; await rm(dir, { recursive: true, force: true }); },
   };
 }
 
@@ -493,6 +505,78 @@ test('startup sync runs once during tasks; only the separate read-only monitor r
     await h.poll(); assert.equal(await h.backupCount(), 1); assert.equal(h.writes, writes); assert.equal(h.requests,requests);
     await h.monitor(); assert.ok(h.requests > requests); assert.equal(h.writes, writes); assert.equal(await h.backupCount(), 1);
   } finally { await h.close(); }
+});
+
+test('activation schedules an immediate read-only check without waiting for the periodic timer', async () => {
+  const h = await harness({ props: verifiedProps });
+  try {
+    assert.deepEqual(h.initialDelays(), [0]);
+    assert.equal(h.requests, 0); // Activation itself is not blocked by network I/O.
+    await h.firstCheck();
+    assert.equal(h.requests, 3);
+    assert.equal((await h.call('status')).value.liveCheck.state, 'mismatch');
+    assert.deepEqual(h.initialDelays(), []);
+    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
+    await h.monitor(); assert.equal(h.requests, 6);
+  } finally { await h.close(); }
+});
+
+test('disabling before the immediate check prevents all discovery requests', async () => {
+  const h = await harness();
+  try {
+    h.dispose(); assert.deepEqual(h.initialDelays(), []);
+    await h.firstCheck(); await h.monitor();
+    assert.equal(h.requests, 0); assert.equal(h.timerCount(), 0);
+  } finally { await h.close(); }
+});
+
+test('hot reload replaces the immediate check and detaches it from the HMR transaction', async () => {
+  const hmrStore = new AsyncLocalStorage();
+  const h = await harness({ props: verifiedProps, hmrStore, beforeFetch: async () => { assert.equal(hmrStore.getStore(), undefined); } });
+  try {
+    h.reload(); assert.deepEqual(h.initialDelays(), [0]); assert.equal(h.timerCount(), 1);
+    await h.firstCheck(); assert.equal(h.requests, 3);
+    h.reload(); await h.firstCheck(); assert.equal(h.requests, 6);
+    assert.equal(h.writes, 0);
+  } finally { await h.close(); hmrStore.disable(); }
+});
+
+test('an initial check deferred by a preference write retries promptly after the write', async () => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const h = await harness({ props: verifiedProps, beforeEdit: async () => { await gate; } });
+  try {
+    const status = (await h.call('status')).value;
+    const pending = h.call('configure', { summaryGuidance: false, expectedRevision: status.settingsRevision });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await h.firstCheck();
+    assert.equal(h.requests, 0); assert.deepEqual(h.initialDelays(), [1000]);
+    release(); assert.equal((await pending).ok, true);
+    const writes = h.writes;
+    await h.firstCheck(); assert.equal(h.requests, 3); assert.equal(h.writes, writes);
+    assert.deepEqual(h.initialDelays(), []);
+  } finally { release(); await h.close(); }
+});
+
+test('an initial discovery failure waits for the normal interval instead of tight retries', async () => {
+  const h = await harness({ serverStatus: 503 });
+  try {
+    await h.firstCheck(); assert.equal(h.requests, 1); assert.deepEqual(h.initialDelays(), []);
+    assert.equal((await h.call('status')).value.liveCheck.state, 'unavailable');
+    await h.monitor(); assert.equal(h.requests, 2);
+  } finally { await h.close(); }
+});
+
+test('a completed manual check or startup sync avoids a duplicate initial metadata read', async () => {
+  for (const autoSync of [false, true]) {
+    const h = await harness({ autoSync, props: verifiedProps });
+    try {
+      if (autoSync) await h.poll(); else await h.call('preview');
+      const requests = h.requests;
+      await h.firstCheck(); assert.equal(h.requests, requests);
+      assert.deepEqual(h.initialDelays(), []);
+    } finally { await h.close(); }
+  }
 });
 
 test('runtime checks detect model switches without Settings open, writes, backups or inference', async () => {

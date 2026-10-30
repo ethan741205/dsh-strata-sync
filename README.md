@@ -12,7 +12,7 @@ The plugin reads Strata's model information, previews the changes, and updates D
 - **Align compaction budgets:** update the matching policies in enabled DSH Agent presets.
 - **Control summary length:** edit the supplemental prompt and adjust two target-length ratios.
 - **Sync on startup:** optionally synchronize once when DSH starts.
-- **Detect changes while running:** check Strata's model metadata every 60 seconds and warn when the model or settings no longer match.
+- **Detect changes while running:** check Strata's model metadata on plugin activation, then every 60 seconds, and warn when the model or settings no longer match.
 - **Review and recover:** preview differences, back up settings, and view the last synchronization result.
 
 Strata Server is read-only to this plugin. Synchronization does not switch or load server models, change server settings, or send test inference requests. Unconfirmed model capabilities keep their existing DSH values.
@@ -58,7 +58,7 @@ Existing conversations keep their selected model route and preset revision. To m
 
 ### When the server model changes
 
-Once a Strata provider is available, read-only monitoring checks its loaded model and confirmed context, output and capability settings every **60 seconds**, even with Settings closed. It compares them with DSH's model and compaction settings. Settings displays a warning for a detected model/context change or settings mismatch; an unavailable check is shown separately rather than reported as a match. The page refreshes this status every 15 seconds, so detection is not instant.
+The first read-only check starts on plugin activation without waiting for the 60-second interval. If synchronization is busy, it waits until that operation finishes. With a configured Strata provider, monitoring checks the loaded model and confirmed context, output and capability settings, then repeats every **60 seconds**, even with Settings closed. It compares them with DSH's model and compaction settings. Settings displays a warning for a detected model/context change or settings mismatch; an unavailable check is shown separately rather than reported as a match. The page refreshes this status every 15 seconds, so a completed check may not appear immediately.
 
 These checks do **not** automatically synchronize or modify an active conversation. After switching models in Strata, use **Check differences → Back up and sync**, then **start a new conversation**. The latest synchronization result is a historical record, not confirmation that an existing conversation uses the new budgets.
 

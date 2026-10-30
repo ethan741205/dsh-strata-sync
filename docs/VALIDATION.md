@@ -11,9 +11,11 @@ Validation date: 2026-10-30 (Asia/Taipei).
 
 ## Automated verification
 
-All **184 automated tests pass** for version 0.11.1. Coverage includes:
+All **190 automated tests pass** for version 0.11.2. Coverage includes:
 
-- Runtime monitoring on a separate 60-second timer, including while Settings is closed and Agent tasks run. It makes metadata GET requests only: no configuration writes, backups, preset activation or inference. Startup synchronization still runs once.
+- Initial monitoring is scheduled immediately after plugin activation yields, outside the HMR transaction. Tests cover read-only startup, disposal before execution, hot reload, short deferral during configuration writes, ordinary recovery intervals after failure, and avoiding duplicate reads after manual checks or startup synchronization.
+
+- Subsequent runtime monitoring on a separate 60-second timer, including while Settings is closed and Agent tasks run. It makes metadata GET requests only: no configuration writes, backups, preset activation or inference. Startup synchronization still runs once.
 - Loaded-model switches, context/output changes, manual acknowledgement of an already configured model, explicit synchronization, transient failure/recovery, incomplete metadata, cancellation, overlapping checks, hot reload, concurrent edits and late responses. Failed or mixed metadata cannot produce a live aligned status.
 - Three-language runtime warnings and recovery, historical-success suppression, main-preview conversation/headroom/summary/retention budgets, effective threshold and formula, summary target ceilings and default-disabled/native fallback states.
 
