@@ -65,6 +65,8 @@ dsh plugin --profile desktop add dsh-strata-sync --registry=https://registry.npm
 
 保持**输出上限跟随 Strata**开启，即可自动选择。关闭后可在**高级设置**输入手动覆盖值。预览会分别显示服务器默认值、实际应用值及其来源。
 
+量化版本不改变已验证模型家族的选项：Qwen3.8 Flash Next 提供 `off / low / medium / xhigh`；当前 DeepSeek Flash 模板提供 `off / low / medium / high / max`，原生默认是 `high`。旧模板仍采用其实际支持的选项；同步只更新可选等级，不改变当前选择。详见[已验证的能力](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/CAPABILITIES.md)。
+
 自动计算采用 [Strata 官方输出公式](https://github.com/Niko1221/Strata/blob/main/apps/host/server/agent/profile.mjs)：`max(4096, min(32768, floor(context × 0.3)))`。
 
 同步时，摘要输出上限和压缩余量通常均为 4,096 tokens。小窗口使用自动计算输出时，两者最多为剩余对话预算的一半，向下取整；因此 8K 窗口使用 2,048。实际压缩阈值取**上下文的 80%**与**上下文 − 回复输出预算 − 压缩余量**中的较小值，近期内容保留量为 **（上下文 − 回复输出预算）× 16%**，向下取整。这些压缩预算由插件计算，并非 Strata 提供的设置。

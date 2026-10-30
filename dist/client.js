@@ -540,7 +540,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           ['missing','unlimited'].includes(preview.server?.model?.outputLimitStatus)&&h('p',{className:'ss-muted'},t('Server has no fixed output limit.')),
           ['unavailable','unverified'].includes(preview.server?.model?.outputLimitStatus)&&h('p',{className:'ss-muted'},t('Server output limit could not be verified.')),
           h('p',null,t('Input types'),': ',preview.server?.model?.capabilities?.input?t(preview.server.model.capabilities.input.includes('image')?'Text + image':'Text'):t('Unconfirmed — keep current setting')),
-          h('p',null,t('Reasoning levels'),': ',preview.capabilityEdits?.reasoningEfforts?Object.keys(preview.capabilityEdits.reasoningEfforts).join(' / '):t('Unconfirmed — keep current setting')),
+          h('p',{'data-testid':'reasoning-levels'},t('Reasoning levels'),': ',preview.capabilityEdits?.reasoningEfforts?Object.keys(preview.capabilityEdits.reasoningEfforts).join(' / '):t('Unconfirmed — keep current setting')),
           preview.capabilityEdits?.reasoningEfforts&&h('p',{className:'ss-muted'},t('Verified template: '),preview.server?.model?.capabilities?.reasoning?.family),
           h('p',{className:'ss-muted'},t('Only verified capabilities are synchronized. Unknown fields keep their existing values. Reasoning choices do not change the selected effort.')),
           h('p',{className:'ss-muted'},t('Context source: '),preview.server?.model?.contextSource||t('Server model metadata')),

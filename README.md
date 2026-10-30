@@ -65,6 +65,8 @@ Existing conversations keep their selected model route and preset revision. To m
 
 Keep **Follow Strata output limit** enabled for automatic selection. Turn it off to set a manual override under **Advanced settings**. The preview shows the server default, effective value and source separately.
 
+Quantization does not change the choices for a verified model family: Qwen3.8 Flash Next offers `off / low / medium / xhigh`; the current DeepSeek Flash template offers `off / low / medium / high / max` and defaults to `high`. Older verified templates keep their supported choices. Sync updates the available choices without changing the selected effort. See [verified capabilities](https://github.com/ethan741205/dsh-strata-sync/blob/main/docs/CAPABILITIES.md).
+
 The fallback follows [Strata's local output formula](https://github.com/Niko1221/Strata/blob/main/apps/host/server/agent/profile.mjs): `max(4096, min(32768, floor(context × 0.3)))`.
 
 When synchronizing, the plugin normally sets a 4,096-token summary output cap and compaction headroom. For small windows using calculated output, both are limited to half the remaining conversation budget, rounded down; an 8K window therefore uses 2,048. The effective compaction trigger is the smaller of **80% of context** and **context − response output − headroom**. Recent-content retention is **(context − response output) × 16%**, rounded down. These compaction budgets are calculated by the plugin, not supplied by Strata.

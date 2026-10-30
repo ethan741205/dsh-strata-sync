@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { streamSimple } from '@earendil-works/pi-ai/api/openai-completions';
 import { planModelCapabilities } from '../src/core.mjs';
 
-for (const templateHash of ['12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce','6f9bd1f87d9dad376b4c79683934b4254396d826ae514ab0244efa904ce1d1a4']) {
+for (const templateHash of ['12827f24b742ea4e80cdc12dbcf9622227056b9f797252a3149263d4f9aaadce','6f9bd1f87d9dad376b4c79683934b4254396d826ae514ab0244efa904ce1d1a4','06cada875e3a04665f9cf47deae9ef32e16ede2c6511205a4031c8b48140d01b']) {
   const r=planModelCapabilities(['text'],{verifiedStrata:true,modelMatched:true,templateHash}).reasoning;
-  for (const effort of Object.keys(r.efforts)) test(`${r.family}: ${effort} sends the verified native thinking fields`, async () => {
+  for (const effort of Object.keys(r.efforts)) test(`${r.family} (${templateHash.slice(0,8)}): ${effort} sends the verified native thinking fields`, async () => {
     const realFetch=globalThis.fetch;
     let body;
     try {

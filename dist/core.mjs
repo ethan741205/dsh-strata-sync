@@ -22,6 +22,9 @@ const TEMPLATE_PROFILES = {
   '6f9bd1f87d9dad376b4c79683934b4254396d826ae514ab0244efa904ce1d1a4': {
     family: 'DeepSeek-V4.1-Flash', efforts: { off: 'none', low: 'low', high: 'high', max: 'max' },
   },
+  '06cada875e3a04665f9cf47deae9ef32e16ede2c6511205a4031c8b48140d01b': {
+    family: 'DeepSeek-V4.1-Flash', efforts: { off: 'none', low: 'low', medium: 'medium', high: 'high', max: 'max' },
+  },
 };
 
 export function planModelCapabilities(modalities, evidence = {}) {
@@ -259,7 +262,7 @@ export async function discoverStrata(baseURL, apiKey = '', options = {}) {
   try {
     props = await readJSON(`${normalized.slice(0, -3)}/props?model=${encodeURIComponent(selected.id)}`, apiKey, request);
     evidence = {
-      verifiedStrata: typeof props.build_info === 'string' && /^Strata \d+\.\d+(?:\.\d+)?(?:\b|$)/u.test(props.build_info),
+      verifiedStrata: typeof props.build_info === 'string' && /^Strata (?:ds4-)?\d+\.\d+(?:\.\d+)?(?:\b|$)/u.test(props.build_info),
       modelMatched: selectedIds.has(props.model_alias),
       templateHash: typeof props.chat_template === 'string'
         ? createHash('sha256').update(props.chat_template.replace(/\r\n/g, '\n')).digest('hex') : null,

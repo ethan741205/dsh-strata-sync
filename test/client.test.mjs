@@ -542,6 +542,23 @@ test('unknown backend diagnostics remain intact with a localized label', async t
   assert.equal(ui.container.querySelector('[role=alert]').textContent, '服务器诊断：Connection unavailable');
 });
 
+test('current DeepSeek preview shows exact verified choices in every locale', async t => {
+  const efforts={off:'none',low:'low',medium:'medium',high:'high',max:'max'};
+  const ui=await mount({previewResult:preview({
+    server:{model:{id:'deepseek-v4.1-flash',capabilities:{input:['text','image'],reasoning:{family:'DeepSeek-V4.1-Flash'}}},warnings:[]},
+    capabilityEdits:{reasoningEfforts:efforts},
+    capabilityStatus:{input:'confirmed',reasoning:'confirmed'},
+    changes:[{field:'reasoningEfforts',before:null,after:efforts}],
+  })});t.after(()=>ui.unmount());
+  await ui.click(ui.button('Check differences'));
+  for(const [locale,label]of [['en','Reasoning levels'],['zh-Hans','推理等级'],['zh-Hant','推理等級']]) {
+    await ui.changeLanguage(locale);
+    assert.equal(ui.container.querySelector('[data-testid="reasoning-levels"]').textContent,`${label}: off / low / medium / high / max`);
+    assert.doesNotMatch(ui.container.querySelector('[data-testid="reasoning-levels"]').textContent,/xhigh/);
+    assert.match(ui.container.querySelector('table').textContent,/medium/);
+  }
+});
+
 test('capability preservation warnings and labels are translated in both Chinese locales', async t => {
   const ui=await mount({previewResult:preview({server:{model:{id:'unknown',capabilities:{input:null,reasoning:null}},warnings:['INPUT_UNCONFIRMED','REASONING_UNCONFIRMED','REASONING_DEFAULT_CONFLICT']}})});t.after(()=>ui.unmount());
   await ui.click(ui.button('Check differences'));
