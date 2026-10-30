@@ -13,9 +13,9 @@ window.__ModuleLoader__.load({
 "Server output limit could not be verified.": {"zh-Hant":"無法確認伺服器的輸出上限。","zh-Hans":"无法确认服务器的输出上限。"},
 "Leave blank to use the server output default; if absent or unlimited, use 30% of context, at least 4,096 and at most 32,768. An explicit override takes priority.": {"zh-Hant":"留空會採用伺服器輸出預設值；未提供或無固定上限時，使用上下文的 30%，最低 4,096、最高 32,768。明確填寫的覆寫值優先。","zh-Hans":"留空采用服务器输出默认值；未提供或无固定上限时，使用上下文的 30%，最低 4,096、最高 32,768。明确填写的覆盖值优先。"},
 "Strata returned an invalid output limit. Review the server setting before syncing.": {"zh-Hant":"Strata 回傳無效的輸出上限，請先檢查伺服器設定。","zh-Hans":"Strata 返回无效的输出上限，请先检查服务器设置。"},
-  "Runs once on the next DSH start; no periodic server checks.": {
-    "zh-Hant": "下次啟動 DSH 時同步一次，不再定期檢查伺服器。",
-    "zh-Hans": "下次启动 DSH 时同步一次，不再定期检查服务器。"
+  "Syncs once on the next DSH start. Runtime checks only warn; they never apply changes.": {
+    "zh-Hant": "下次啟動 DSH 時同步一次。運行中檢查只會提醒，不會自動套用變更。",
+    "zh-Hans": "下次启动 DSH 时同步一次。运行中检查只会提醒，不会自动应用更改。"
   },
   "Image": {"zh-Hant":"圖片","zh-Hans":"图片"},
   "View mapping": {"zh-Hant":"查看參數對應","zh-Hans":"查看参数映射"},
@@ -365,6 +365,24 @@ window.__ModuleLoader__.load({
   }
 };
     Object.assign(translations, {
+      'Runtime model check': {'zh-Hant':'運行中模型檢查','zh-Hans':'运行中模型检查'},
+      'Strata model or settings changed.': {'zh-Hant':'Strata 模型或設定已變更。','zh-Hans':'Strata 模型或设置已更改。'},
+      'Current model settings are aligned.': {'zh-Hant':'目前模型設定已對齊。','zh-Hans':'当前模型设置已对齐。'},
+      'Unable to verify the current server model.': {'zh-Hant':'無法確認目前的伺服器模型。','zh-Hans':'无法确认当前的服务器模型。'},
+      'Waiting for the first server check.': {'zh-Hant':'等待首次伺服器檢查。','zh-Hans':'等待首次服务器检查。'},
+      'Select a Strata provider to enable model checks.': {'zh-Hant':'選擇 Strata 供應者以啟用模型檢查。','zh-Hans':'选择 Strata 提供方以启用模型检查。'},
+      'Check differences, sync, then start a new conversation. Existing conversations keep their previous settings.': {'zh-Hant':'請檢查差異、同步後開啟新對話；既有對話仍保留先前設定。','zh-Hans':'请检查差异、同步后开启新对话；现有对话仍保留之前的设置。'},
+      'Existing conversations may still use an earlier compaction policy.': {'zh-Hant':'既有對話可能仍使用先前的壓縮政策。','zh-Hans':'现有对话可能仍使用之前的压缩策略。'},
+      'Previous sync results may be outdated. Check the server connection and try Check differences.': {'zh-Hant':'先前同步結果可能已過時。請確認伺服器連線，再點「檢查差異」。','zh-Hans':'之前的同步结果可能已过时。请确认服务器连接，再点击“检查差异”。'},
+      'Checks every 60 seconds, including while Settings is closed. No automatic changes or inference requests.': {'zh-Hant':'每 60 秒檢查一次，關閉設定頁後仍會檢查；不自動改設定或發送推論請求。','zh-Hans':'每 60 秒检查一次，关闭设置页后仍会检查；不自动改设置或发送推理请求。'},
+      'Last checked: ': {'zh-Hant':'最近檢查：','zh-Hans':'最近检查：'},
+      'Previously detected model': {'zh-Hant':'先前偵測的模型','zh-Hans':'之前检测到的模型'},
+      'Compaction budget': {'zh-Hant':'壓縮預算','zh-Hans':'压缩预算'},
+      'Conversation budget': {'zh-Hant':'對話預算','zh-Hans':'对话预算'},
+      'Conversation budget = context − response output. Trigger = min(80% of context, conversation budget − headroom). Retain 16% of the conversation budget.': {'zh-Hant':'對話預算 = 上下文 − 回覆輸出。觸發門檻 = min(上下文的 80%, 對話預算 − 壓縮餘裕)。保留對話預算的 16%。','zh-Hans':'对话预算 = 上下文 − 回复输出。触发门槛 = min(上下文的 80%, 对话预算 − 压缩余量)。保留对话预算的 16%。'},
+      'Summary target (estimate)': {'zh-Hant':'摘要目標（估計）','zh-Hans':'摘要目标（估计）'},
+      'Disabled — native summary instructions are used.': {'zh-Hant':'未啟用 — 使用原生摘要指令。','zh-Hans':'未启用 — 使用原生摘要指令。'},
+      'Preview ceiling = summary output limit ÷ output divisor, rounded down. The actual target is also limited by available context and source length.': {'zh-Hant':'預覽目標上限 = 摘要輸出上限 ÷ 輸出除數，向下取整。實際目標也受可用上下文與原文長度限制。','zh-Hans':'预览目标上限 = 摘要输出上限 ÷ 输出除数，向下取整。实际目标也受可用上下文与原文长度限制。'},
       'Sync the model and context budgets from Strata Server to DSH.': {'zh-Hant':'將 Strata Server 的模型與上下文預算同步至 DSH。','zh-Hans':'将 Strata Server 的模型与上下文预算同步到 DSH。'},
       'Start here': {'zh-Hant':'從這裡開始','zh-Hans':'从这里开始'},
       'First, check differences to read the loaded model and preview the changes.': {'zh-Hant':'先點「檢查差異」，讀取目前載入的模型並預覽變更。','zh-Hans':'先点击“检查差异”，读取当前加载的模型并预览更改。'},
@@ -486,6 +504,9 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       const valid=validDivisor&&validPrompt&&(draft.outputTokens===null || Number.isSafeInteger(draft.outputTokens)&&draft.outputTokens>0);
       const dirty=!!baseline.current&&!equal(draft,baseline.current.values);
       const displayedResult=!result || state?.lastApplied?.at>result.at ? state?.lastApplied : result;
+      const liveCheck=state?.liveCheck;
+      const liveWarning=liveCheck?.state==='mismatch'||liveCheck?.state==='unavailable';
+      const liveTitle={unchecked:'Waiting for the first server check.',unconfigured:'Select a Strata provider to enable model checks.',aligned:'Current model settings are aligned.',mismatch:'Strata model or settings changed.',unavailable:'Unable to verify the current server model.'}[liveCheck?.state];
       const activeBudget=preview?.budget;
       const summaryTargetCeiling=form.summaryGuidance&&validDivisor&&Number.isSafeInteger(activeBudget?.contextWindow)&&activeBudget.contextWindow>0&&Number.isSafeInteger(activeBudget?.summaryMaxTokens)&&activeBudget.summaryMaxTokens>0
         ? Math.floor(activeBudget.summaryMaxTokens/draft.summaryOutputDivisor) : null;
@@ -510,6 +531,15 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       return h('section',{className:'strata-sync','aria-label':'dsh-strata-sync'},
         h('style',null,css+workflowCss),
         h('header',null,h('h2',null,'dsh-strata-sync'),h('p',{className:'ss-muted'},t('Sync the model and context budgets from Strata Server to DSH.'))),
+        liveTitle&&h('div',{className:'ss-status'+(liveWarning?' ss-error':''),'data-testid':'live-check',role:'status','aria-live':'polite'},
+          h('strong',null,t(liveTitle)),
+          ['aligned','mismatch'].includes(liveCheck.state)&&h('p',null,t('Model'),': ',h('code',null,liveCheck.modelId), ' · ',t('Context window'),': ',format(liveCheck.contextWindow)),
+          liveCheck.modelChanged&&liveCheck.previousModelId&&h('p',{className:'ss-muted'},t('Previously detected model'),': ',h('code',null,liveCheck.previousModelId),liveCheck.previousContextWindow?' · '+format(liveCheck.previousContextWindow)+' tokens':''),
+          liveCheck.state==='mismatch'&&h('p',null,t('Check differences, sync, then start a new conversation. Existing conversations keep their previous settings.')),
+          liveCheck.state==='aligned'&&h('p',{className:'ss-muted'},t('Existing conversations may still use an earlier compaction policy.')),
+          liveCheck.state==='unavailable'&&h('p',null,t('Previous sync results may be outdated. Check the server connection and try Check differences.')),
+          h('p',{className:'ss-muted'},t('Checks every 60 seconds, including while Settings is closed. No automatic changes or inference requests.')),
+          liveCheck.checkedAt&&h('p',{className:'ss-muted'},t('Last checked: '),format(liveCheck.checkedAt))),
         !state&&!loadError&&h('div',{className:'ss-status',role:'status'},t('Loading sync settings...')),
         state?.busy&&h('div',{className:'ss-status',role:'status'},t('A synchronization is applying settings. Please wait.')),
         (error||loadError)&&h('div',{className:'ss-status ss-error',role:'alert'},diagnostic(error||loadError)),
@@ -548,8 +578,20 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           ...warnings(preview.server?.warnings),
           preview.changes?.length>0&&h('div',{className:'ss-scroll'},h('table',null,h('thead',null,h('tr',null,h('th',{scope:'col'},t('Setting')),h('th',{scope:'col'},t('Current')),h('th',{scope:'col'},t('After sync')))),
             h('tbody',null,...preview.changes.map(c=>h('tr',{key:(c.target||'')+c.field},h('th',{scope:'row'},t(labels[c.field]||c.field),c.target&&h('span',{className:'ss-target',title:c.target},c.target)),h('td',{className:'ss-before','data-label':t('Current')},renderValue(c.field,c.before)),h('td',{className:'ss-after','data-label':t('After sync')},renderValue(c.field,c.after))))))),
-          !preview.changes?.length&&alignment(preview),
-          h('p',null,t('Effective compaction threshold: '),format(preview.budget?.thresholdTokens),' tokens (',preview.budget?.thresholdPercent?.toFixed(2),'%)'),
+          !preview.changes?.length&&!liveWarning&&alignment(preview),
+          h('div',{'data-testid':'preview-compaction-budget'},
+            h('h4',null,t('Compaction budget')),
+            h('div',{className:'ss-grid'},...[
+              ['messageBudgetTokens','Conversation budget'],['headroomTokens','Compaction headroom'],['summaryMaxTokens','Summary output limit'],['retainTokens','Recent conversation retention'],
+            ].map(([field,label])=>h('div',{key:field,'data-budget-field':field},h('strong',null,format(preview.budget?.[field]),' tokens'),h('div',{className:'ss-muted'},t(label))))),
+            h('p',{'data-budget-field':'thresholdTokens'},t('Effective compaction threshold: '),format(preview.budget?.thresholdTokens),' tokens (',preview.budget?.thresholdPercent?.toFixed(2),'%)'),
+            h('p',{className:'ss-muted'},t('Conversation budget = context − response output. Trigger = min(80% of context, conversation budget − headroom). Retain 16% of the conversation budget.'))),
+          h('div',{'data-testid':'preview-summary-target'},h('h4',null,t('Summary target (estimate)')),
+            !form.summaryGuidance?h('p',{'data-testid':'summary-guidance-off'},t('Disabled — native summary instructions are used.')):
+              summaryTargetCeiling!==null&&(summaryTargetCeiling>=256
+                ? h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens (',format(preview.budget.summaryMaxTokens),' ÷ ',format(draft.summaryOutputDivisor),')')
+                : h('p',{'data-testid':'summary-target-native'},t('This preview is below the 256-token minimum. The native summary prompt remains unchanged.'))),
+            form.summaryGuidance&&h('p',{className:'ss-muted'},t('Preview ceiling = summary output limit ÷ output divisor, rounded down. The actual target is also limited by available context and source length.'))),
           h('p',{className:'ss-muted'},t('Only DSH settings are updated. Sync does not switch server models, change Strata configuration, or send inference requests. Start a new conversation after syncing.'))),
         h('div',{className:'ss-actions','data-testid':'sync-apply'},
           h('button',{className:preview?.changes?.length?'primary':'',disabled:pending||!state||dirty||conflict||!preview||state.busy||!preview.changes?.length,onClick:()=>action(async()=>{
@@ -562,7 +604,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         displayedResult?.budget&&h('div',{className:'ss-card','data-testid':'sync-result'},
           h('strong',null,t('Latest synchronization result')),h('p',{className:'ss-muted'},t('This records the last synchronization, not a live server check.')),
           h('p',null,t('Model'),': ',h('code',null,displayedResult.modelId)),h('p',null,t('Context window'),': ',format(displayedResult.budget.contextWindow)),
-          outputValues(displayedResult.budget,displayedResult),alignment(displayedResult),
+          outputValues(displayedResult.budget,displayedResult),!liveWarning&&alignment(displayedResult),
           h('p',null,t(displayedResult.backupPath?'Backup created':'No settings changed; no new backup was needed.')),
           displayedResult.backupPath&&h('p',{className:'ss-muted'},t('Original settings backup: '),h('code',null,displayedResult.backupPath)),
           h('p',{className:'ss-muted'},t('Last sync: '),format(displayedResult.at)),...warnings(displayedResult.warnings)),
@@ -577,7 +619,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
             h('p',{className:'ss-muted'},t(form.manual?'A manual limit takes priority over the server default and automatic calculation.':'Turn off Follow Strata output limit to enter a manual override.')))),
         h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.follow,onChange:e=>edit({follow:e.target.checked}),disabled:pending||!state}),t('Follow the loaded Strata model as the default')),
         h('label',{className:'ss-check'},h('input',{type:'checkbox',checked:form.auto,onChange:e=>edit({auto:e.target.checked}),disabled:pending||!state}),t('Automatically sync when DSH starts')),
-        h('p',{className:'ss-muted'},t('Runs once on the next DSH start; no periodic server checks.'))),
+        h('p',{className:'ss-muted'},t('Syncs once on the next DSH start. Runtime checks only warn; they never apply changes.'))),
         h('details',{className:'ss-card ss-options','data-testid':'summary-target'},
           h('summary',{className:'ss-option-title'},h('span',null,t('Dynamic summary target')),h('span',{className:'ss-badge'},t(form.summaryGuidance?'Enabled':'Optional'))),
           h('label',{className:'ss-check'},h('input',{type:'checkbox','data-testid':'summary-guidance-toggle','aria-label':t('Enable summary guidance'),checked:form.summaryGuidance,onChange:e=>edit({summaryGuidance:e.target.checked}),disabled:pending||!state}),t('Enable summary guidance')),
@@ -589,9 +631,6 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           state&&!validPrompt&&h('p',{className:'ss-status ss-error',role:'alert'},t('Use 1–2,048 characters and include {target}.')),
           h('button',{type:'button','data-testid':'summary-prompt-reset',disabled:pending||!state?.defaultSummaryPromptTemplate||form.summaryPrompt===state.defaultSummaryPromptTemplate,onClick:()=>edit({summaryPrompt:state.defaultSummaryPromptTemplate})},t('Restore default prompt')),
           h('p',{className:'ss-muted'},t("Appended to DSH's native prompt; {target} becomes the calculated token target. Save preferences to apply.")),
-          summaryTargetCeiling!==null&&(summaryTargetCeiling>=256
-            ? h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens')
-            : h('p',{className:'ss-status','data-testid':'summary-target-native'},t('This preview is below the 256-token minimum. The native summary prompt remains unchanged.'))),
           h('details',{className:'ss-details','data-testid':'summary-details'},h('summary',null,t('Calculation and limits')),
             h('p',{className:'ss-muted'},t('Target = floor(min(estimated effective output budget / O, selected content estimate / S)). Default divisors: 2 and 2 (50% each).')),
             h('p',{className:'ss-muted'},t('The preview uses the proposed summary cap. Actual targets also account for the estimated remaining context and source length; they may be lower.'),' ',t('When guidance cannot be applied, DSH keeps its native summary behavior.')))),

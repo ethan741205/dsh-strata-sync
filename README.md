@@ -12,6 +12,7 @@ The plugin reads Strata's model information, previews the changes, and updates D
 - **Align compaction budgets:** update the matching policies in enabled DSH Agent presets.
 - **Control summary length:** edit the supplemental prompt and adjust two target-length ratios.
 - **Sync on startup:** optionally synchronize once when DSH starts.
+- **Detect changes while running:** check Strata's model metadata every 60 seconds and warn when the model or settings no longer match.
 - **Review and recover:** preview differences, back up settings, and view the last synchronization result.
 
 Strata Server is read-only to this plugin. Synchronization does not switch or load server models, change server settings, or send test inference requests. Unconfirmed model capabilities keep their existing DSH values.
@@ -46,12 +47,20 @@ Open **Settings → dsh-strata-sync**:
 
 The main flow appears first: **Check differences → Review changes → Back up and sync**. **Sync preferences** and the optional **Dynamic summary target** are collapsed below it; expand them to adjust options or edit the supplemental prompt.
 
+The change preview shows the conversation budget, compaction headroom, summary output cap, effective compaction trigger and recent-content retention. It also shows the estimated summary target ceiling when summary guidance is enabled, or marks it as disabled. The formulas explain how the proposed budgets were calculated.
+
 1. Select your Strata provider and click **Save preferences**.
 2. Click **Check differences** to inspect the loaded model and proposed changes.
 3. Click **Back up and sync**.
 4. **Start a new conversation** to use the updated model and Agent preset settings.
 
-Existing conversations keep their selected model route and preset revision. To make future setup automatic, enable **Automatically sync when DSH starts** and save. This option is off by default and takes effect on the next start; it can run during tasks and does not poll continuously.
+Existing conversations keep their selected model route and preset revision. To make future setup automatic, enable **Automatically sync when DSH starts** and save. This option is off by default and takes effect on the next start; it can run during tasks but synchronizes only once.
+
+### When the server model changes
+
+Once a Strata provider is available, read-only monitoring checks its loaded model and confirmed context, output and capability settings every **60 seconds**, even with Settings closed. It compares them with DSH's model and compaction settings. Settings displays a warning for a detected model/context change or settings mismatch; an unavailable check is shown separately rather than reported as a match. The page refreshes this status every 15 seconds, so detection is not instant.
+
+These checks do **not** automatically synchronize or modify an active conversation. After switching models in Strata, use **Check differences → Back up and sync**, then **start a new conversation**. The latest synchronization result is a historical record, not confirmation that an existing conversation uses the new budgets.
 
 ## Model and output settings
 
@@ -96,7 +105,7 @@ The target is the smaller result, rounded down. All divisors accept decimals of 
 
 The effective output budget is an **estimate**, not the raw requested `maxTokens` or a server-confirmed cap. It is the smaller of the request's summary cap and estimated remaining context. The latter uses the smaller verified server/client window, subtracts the full prompt (including system text, tool schemas and the supplement), and allows for the supported pi-ai adapter's 4,096-token safety reserve. Text is estimated at 3.5 characters/token with extra framing. The separate source estimate uses DSH's four-character heuristic and excludes the system prompt, tools and summary instruction. Neither estimate is an exact tokenizer count.
 
-For example, a 4,096-token effective output budget with enough source content gives a **2,048-token target** in either 32K or 64K context. A 2,000-token source instead gives a **1,000-token target**. Less remaining context can reduce the target further. The UI previews an upper bound from the proposed summary cap, before request-specific costs are known.
+For example, a 4,096-token effective output budget with enough source content gives a **2,048-token target** in either 32K or 64K context. A 2,000-token source instead gives a **1,000-token target**. Less remaining context can reduce the target further. The main change preview shows an upper bound from the proposed summary cap divided by O; actual targets also account for remaining context and source length, so they may be lower.
 
 This is a writing instruction, **not a hard output limit or a guarantee against truncation**. Reasoning may consume the same output budget; the plugin does not change reasoning, `maxTokens`, `fit_max_tokens` or compaction timing. The server's actual tokenizer, later middleware, or a different adapter version may impose a lower limit.
 

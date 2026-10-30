@@ -64,6 +64,11 @@ export function apply(ctx, initialConfig) {
   let lastApplied = null;
   let lastError = null;
   let lastFingerprint = null;
+  let liveCheck = { state: 'unchecked', checkedAt: null };
+  let liveBaseline = null;
+  let liveRevision = 0;
+  let monitorRunning = false;
+  const monitorAbort = new AbortController();
   const previewSnapshots = new WeakMap();
   function ensureOpen() { if (closed) refuse('disposed', 'Strata Sync was disabled or reloaded; this operation was cancelled.'); }
 
@@ -157,7 +162,7 @@ export function apply(ctx, initialConfig) {
     } catch { /* The page remains usable when the required provider is absent. */ }
     return { ...publicSettings(), defaultSummaryPromptTemplate: DEFAULT_SUMMARY_TEMPLATE, settingsRevision: hash(publicSettings()),
       // UI busy describes a configuration write, never a running Agent task.
-      busy: !!writeBarrier, providers, lastPreview, lastApplied, lastError };
+      busy: !!writeBarrier, providers, lastPreview, lastApplied, lastError, liveCheck };
   }
   async function credential(providerId, route) {
     if (route.apiKeyEnv) {
@@ -202,11 +207,12 @@ export function apply(ctx, initialConfig) {
     refreshSettings();
     return settings;
   });
-  async function preview(request = {}) {
+  async function preview(request = {}, observation = {}) {
     ensureOpen();
     payload(request, ['providerId', 'outputTokens']);
     const before = snapshot();
-    await checkPresets(before.owners);
+    // Monitoring reads existing policy configuration without activating presets.
+    if (observation.record !== false) await checkPresets(before.owners);
     ensureOpen();
     const providerId = providerChoice(before.llm.providers ?? {}, request.providerId);
     const route = before.llm.providers[providerId];
@@ -218,7 +224,7 @@ export function apply(ctx, initialConfig) {
     if (outputTokens !== undefined && (!Number.isSafeInteger(outputTokens) || outputTokens < 1)) refuse('invalid-budget', 'Output tokens must be a positive integer.');
     const apiKey = await credential(providerId, route);
     ensureOpen();
-    const discovered = await discoverStrata(route.baseURL, apiKey);
+    const discovered = await discoverStrata(route.baseURL, apiKey, observation.discovery);
     ensureOpen();
     assertSnapshot(before);
     const budget = planBudget(discovered.model.contextWindow, { outputTokens, serverOutputTokens: discovered.model.serverOutputTokens });
@@ -271,9 +277,53 @@ export function apply(ctx, initialConfig) {
     const view = { providerId, server: { baseURL: discovered.baseURL, model: discovered.model, warnings }, budget, current, compactions, capabilityEdits, capabilityStatus,
       presetIds, needsNewConversation: presetIds.length > 0, changes, fingerprint, busy: !!writeBarrier };
     previewSnapshots.set(view, before);
-    lastPreview = view;
-    lastError = null;
+    if (observation.record !== false) {
+      lastPreview = view;
+      lastError = null;
+      liveRevision++;
+      // A fresh manual check can acknowledge a switch to an already aligned
+      // model. There is no configuration write for the user to apply then.
+      recordLiveCheck(view, view.changes.length === 0);
+    }
     return view;
+  }
+  function recordLiveCheck(view, acknowledge = false) {
+    // Manual previews may use documented fallbacks, but a live green status
+    // must not certify an unknown output default or a stale listing context.
+    const incomplete = ['unavailable', 'unverified'].includes(view.server.model.outputLimitStatus)
+      || view.server.warnings.some(warning => warning.startsWith('SLOTS_') && warning !== 'SLOTS_OVERRIDE_MODEL_CONTEXT');
+    if (incomplete) {
+      liveCheck = { state: 'unavailable', checkedAt: new Date().toISOString(),
+        error: { code: 'INCOMPLETE_METADATA', message: 'Current model metadata could not be fully verified.' } };
+      return;
+    }
+    const identity = { providerId: view.providerId, baseURL: view.server.baseURL,
+      modelId: view.server.model.id, contextWindow: view.budget.contextWindow };
+    if (acknowledge || !liveBaseline || liveBaseline.providerId !== identity.providerId || liveBaseline.baseURL !== identity.baseURL) {
+      liveBaseline = identity;
+    }
+    const modelChanged = liveBaseline.modelId !== identity.modelId || liveBaseline.contextWindow !== identity.contextWindow;
+    liveCheck = { state: modelChanged || view.changes.length ? 'mismatch' : 'aligned', checkedAt: new Date().toISOString(),
+      modelId: identity.modelId, contextWindow: identity.contextWindow, modelChanged,
+      ...(modelChanged ? { previousModelId: liveBaseline.modelId, previousContextWindow: liveBaseline.contextWindow } : {}),
+      // Only field identifiers are needed by the warning; no configuration values.
+      changes: view.changes.map(({ field, target }) => ({ field, ...(target ? { target } : {}) })) };
+  }
+  async function monitorModel() {
+    if (closed || monitorRunning || inFlight || writeBarrier) return;
+    monitorRunning = true;
+    const revision = liveRevision;
+    try {
+      const view = await preview({}, { record: false, discovery: {
+        timeout: 3000, signal: AbortSignal.any([monitorAbort.signal, AbortSignal.timeout(10000)]),
+      } });
+      if (!closed && revision === liveRevision) recordLiveCheck(view);
+    } catch (error) {
+      if (!closed && revision === liveRevision) {
+        const unconfigured = ['provider-required', 'provider-missing'].includes(error?.code);
+        liveCheck = { state: unconfigured ? 'unconfigured' : 'unavailable', checkedAt: new Date().toISOString(), error: safeError(error) };
+      }
+    } finally { monitorRunning = false; }
   }
   function appliedSummary(view, backupPath, applied) {
     return { at: new Date().toISOString(), modelId: view.server.model.id, providerId: view.providerId, backupPath, applied,
@@ -307,6 +357,8 @@ export function apply(ctx, initialConfig) {
     assertSnapshot(before);
     if (view.changes.length === 0) {
       lastApplied = appliedSummary(view, null, false);
+      liveRevision++;
+      recordLiveCheck(view, true);
       return { applied: false, backupPath: null, preview: view };
     }
 
@@ -364,6 +416,8 @@ export function apply(ctx, initialConfig) {
       lastApplied = appliedSummary(view, backupPath, true);
       lastFingerprint = view.fingerprint;
       lastError = null;
+      liveRevision++;
+      recordLiveCheck({ ...view, changes: [] }, true);
       return { applied: true, backupPath, preview: view };
     } catch (error) {
       let rollbackFailed = false;
@@ -421,7 +475,8 @@ export function apply(ctx, initialConfig) {
     // Build the response while this Cordis scope is still alive; never read its
     // injected services after Loader replaces it.
     const response = { ...status(), ...publicSettings(next),
-      settingsRevision: hash(publicSettings(next)), lastPreview: null, lastError: null };
+      settingsRevision: hash(publicSettings(next)), lastPreview: null, lastError: null,
+      liveCheck: { state: 'unchecked', checkedAt: null } };
     await backup();
     ensureOpen();
     await ctx.configEditor.edit(self, (current) => {
@@ -435,6 +490,8 @@ export function apply(ctx, initialConfig) {
     settings = next;
     lastPreview = null;
     lastError = null;
+    liveRevision++;
+    liveCheck = response.liveCheck;
     return response;
   }
   function safeError(error) {
@@ -545,10 +602,15 @@ export function apply(ctx, initialConfig) {
   // edits are rejected as nested HMR transactions. Mirror Hmr.watchConfig():
   // detach only timer creation, while every write still uses ConfigEditor and
   // its normal runExclusive queue. `executing` is a version-specific host seam.
-  // This timer only waits for startup readiness; no recurring server polling.
+  // Startup writes still run once; the separate monitor only reads metadata.
   const createTimer = () => setInterval(() => { void poll(); }, 1_000);
   const executing = ctx.get('hmr')?.executing;
   if (startup.pending) timer = typeof executing?.exit === 'function' ? executing.exit(createTimer) : createTimer();
   timer?.unref?.();
-  ctx.effect(() => () => { closed = true; clearInterval(timer); releaseWrite?.(); }, 'strata-sync: startup lifetime');
+  const createMonitor = () => setInterval(monitorModel, 60_000);
+  const monitorTimer = typeof executing?.exit === 'function' ? executing.exit(createMonitor) : createMonitor();
+  monitorTimer?.unref?.();
+  ctx.effect(() => () => {
+    closed = true; clearInterval(timer); clearInterval(monitorTimer); monitorAbort.abort(); releaseWrite?.();
+  }, 'strata-sync: startup and monitor lifetime');
 }

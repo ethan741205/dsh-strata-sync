@@ -24,7 +24,7 @@ function status(overrides = {}) {
 function preview(overrides = {}) {
   return { fingerprint: 'preview-one', busy: false,
     server: { model: { id: 'qwen-local', contextSource: 'slots.n_ctx' }, warnings: [] },
-    budget: { contextWindow:32768,outputTokens:9830,summaryMaxTokens:4096,outputSource:'calculated',thresholdTokens: 18842, thresholdPercent: 57.5 },
+    budget: { contextWindow:32768,outputTokens:9830,summaryMaxTokens:4096,headroomTokens:4096,messageBudgetTokens:22938,retainTokens:3670,outputSource:'calculated',thresholdTokens: 18842, thresholdPercent: 57.5 },
     changes: [{ field: 'contextWindow', before: 65536, after: 32768 }, { field: 'headroomTokens', before: 65536, after: 4096 }],
     ...overrides };
 }
@@ -172,7 +172,8 @@ test('omitted summary guidance defaults off in all locales without writing prefe
       assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').checked,false);
       await ui.click(ui.button(locale==='en'?'Check differences':locale==='zh-Hans'?'检查差异':'檢查差異'));
       assert.equal(ui.container.querySelector('[data-testid="summary-target-ceiling"]'),null);
-      assert.equal(ui.container.querySelector('[data-testid="summary-guidance-off"]'),null);
+      assert.ok(ui.container.querySelector('[data-testid="preview-summary-target"] [data-testid="summary-guidance-off"]'));
+      assert.ok(ui.container.querySelector('[data-testid="summary-guidance-off"]').textContent.includes(locale==='en'?'Disabled — native summary instructions are used.':locale==='zh-Hans'?'未启用 — 使用原生摘要指令。':'未啟用 — 使用原生摘要指令。'));
       assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
     } finally { await ui.unmount(); }
   }
@@ -193,7 +194,8 @@ test('explicitly enabled summary guidance uses two 50% bounds and preview does n
   assert.equal(card.querySelector('[data-testid="summary-target-ceiling"]'),null);
   assert.equal(card.querySelector('details').open,false);
   await ui.click(ui.button('Check differences'));
-  assert.match(card.querySelector('[data-testid="summary-target-ceiling"]').textContent,/2,048 tokens/);
+  assert.equal(card.querySelector('[data-testid="summary-target-ceiling"]'),null);
+  assert.match(ui.container.querySelector('[data-testid="sync-preview"] [data-testid="summary-target-ceiling"]').textContent,/2,048 tokens/);
   assert.match(card.textContent,/Target = floor\(min\(estimated effective output budget \/ O/);
   assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
   assert.ok(ui.calls.every(c=>['status','preview'].includes(c.name)));
@@ -202,7 +204,7 @@ test('explicitly enabled summary guidance uses two 50% bounds and preview does n
 test('summary preview ceiling follows context and summary cap without claiming the actual target', async t => {
   const ui=await mount({previewResult:preview({budget:{contextWindow:65536,summaryMaxTokens:4096}})});t.after(()=>ui.unmount());
   await ui.click(ui.button('Check differences'));
-  const card=ui.container.querySelector('[data-testid="summary-target"]');
+  const card=ui.container.querySelector('[data-testid="preview-summary-target"]');
   assert.match(card.querySelector('[data-testid="summary-target-ceiling"]').textContent,/2,048 tokens/);
   assert.match(card.textContent,/Maximum target for this preview/);
 });
@@ -221,7 +223,7 @@ test('summary controls save only changed preferences with their revision and per
   assert.equal(ui.container.querySelector('[data-testid="summary-output-divisor"]').value,'32');
   await ui.click(ui.button('Check differences'));
   assert.equal(ui.container.querySelector('[data-testid="summary-target-ceiling"]'),null);
-  assert.equal(ui.container.querySelector('[data-testid="summary-guidance-off"]'),null);
+  assert.ok(ui.container.querySelector('[data-testid="preview-summary-target"] [data-testid="summary-guidance-off"]'));
   assert.equal(ui.calls.some(call=>call.name==='apply'),false);
 });
 
@@ -306,13 +308,13 @@ test('summary guidance follows DSH Chinese locales without changing preferences'
   const card=ui.container.querySelector('[data-testid="summary-target"]');
   assert.match(card.textContent,/动态摘要目标/);
   assert.match(card.textContent,/附加于 DSH 原生提示词/);
-  assert.match(card.textContent,/本次预览的目标上限：2,048 tokens/);
+  assert.match(ui.container.querySelector('[data-testid="preview-summary-target"]').textContent,/本次预览的目标上限：2,048 tokens/);
   assert.match(card.textContent,/无法应用时，沿用 DSH 原生摘要/);
   assert.equal(card.querySelector('[data-testid="summary-details"]').querySelectorAll('p').length,2);
   await ui.changeLanguage('zh-Hant');
   assert.match(card.textContent,/動態摘要目標/);
   assert.match(card.textContent,/附加於 DSH 原生提示詞/);
-  assert.match(card.textContent,/本次預覽的目標上限：2,048 tokens/);
+  assert.match(ui.container.querySelector('[data-testid="preview-summary-target"]').textContent,/本次預覽的目標上限：2,048 tokens/);
   assert.match(card.textContent,/無法套用時，沿用 DSH 原生摘要/);
   assert.equal(card.querySelector('[data-testid="summary-details"]').querySelectorAll('p').length,2);
   assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
@@ -706,4 +708,72 @@ test('newer sync results from another window replace the local result on refresh
   const result=ui.container.querySelector('[data-testid="sync-result"]');
   assert.match(result.textContent,/newer-model/);assert.match(result.textContent,/65,536/);assert.match(result.textContent,/newer.yml/);
   assert.doesNotMatch(result.textContent,/qwen-local/);
+});
+
+test('runtime mismatch and recovery follow all locales without syncing or exposing diagnostics',async t=>{
+  const ui=await mount({initial:status({liveCheck:{state:'unchecked',checkedAt:null}})});t.after(()=>ui.unmount());
+  assert.match(ui.container.querySelector('[data-testid="live-check"]').textContent,/Waiting for the first server check/);
+  for(const [locale,warning,aligned,unavailable]of [
+    ['en','Strata model or settings changed.','Current model settings are aligned.','Unable to verify the current server model.'],
+    ['zh-Hans','Strata 模型或设置已更改。','当前模型设置已对齐。','无法确认当前的服务器模型。'],
+    ['zh-Hant','Strata 模型或設定已變更。','目前模型設定已對齊。','無法確認目前的伺服器模型。'],
+  ]) {
+    await ui.changeLanguage(locale);
+    ui.setStatus({liveCheck:{state:'mismatch',checkedAt:'2026-10-30T05:00:00Z',modelId:'deepseek-new',contextWindow:32768,modelChanged:true,previousModelId:'qwen-old',previousContextWindow:65536}});
+    await ui.poll();
+    const card=ui.container.querySelector('[data-testid="live-check"]');
+    assert.ok(card.textContent.includes(warning));assert.ok(card.classList.contains('ss-error'));
+    assert.equal(card.getAttribute('role'),'status');assert.equal(card.getAttribute('aria-live'),'polite');
+    for(const value of ['deepseek-new','qwen-old','32,768','65,536','2026-10-30T05:00:00Z']) assert.ok(card.textContent.includes(value));
+    ui.setStatus({liveCheck:{state:'unavailable',checkedAt:'2026-10-30T05:01:00Z',error:{code:'HTTP_ERROR',message:'secret-private-server-response'}}});
+    await ui.poll();
+    assert.ok(card.textContent.includes(unavailable));assert.doesNotMatch(card.textContent,/secret-private-server-response|deepseek-new|qwen-old/);
+    ui.setStatus({liveCheck:{state:'aligned',checkedAt:'2026-10-30T05:02:00Z',modelId:'deepseek-new',contextWindow:32768}});
+    await ui.poll();
+    assert.ok(card.textContent.includes(aligned));assert.equal(card.classList.contains('ss-error'),false);
+  }
+  assert.ok(ui.calls.every(call=>call.name==='status'));
+  assert.equal([...ui.intervals.values()][0].delay,15000);
+});
+
+test('runtime warnings suppress historical success claims and preserve unsaved preferences',async t=>{
+  const ui=await mount({initial:status({liveCheck:{state:'aligned',checkedAt:'2026-10-30T05:00:00Z',modelId:'qwen',contextWindow:65536},lastApplied:{at:'2026-10-30T04:00:00Z',modelId:'qwen',budget:{contextWindow:65536,outputTokens:16384},capabilityStatus:{input:'confirmed',reasoning:'confirmed'}}})});t.after(()=>ui.unmount());
+  const result=ui.container.querySelector('[data-testid="sync-result"]');
+  assert.match(result.textContent,/All synchronized settings are confirmed and aligned/);
+  await ui.setOutput('4096');
+  for(const state of ['mismatch','unavailable']) {
+    ui.setStatus({liveCheck:{state,checkedAt:'2026-10-30T05:01:00Z',modelId:'deepseek',contextWindow:32768}});
+    await ui.poll();
+    assert.equal(result.querySelector('[data-testid="alignment"]'),null);
+    assert.match(result.textContent,/not a live server check/);
+    assert.equal(ui.container.querySelector('input[type=number]').value,'4096');
+  }
+  assert.ok(ui.calls.every(call=>call.name==='status'));
+});
+
+test('main change preview always exposes calculated compaction budget and estimated summary target',async t=>{
+  const ui=await mount({previewResult:preview({changes:[]})});t.after(()=>ui.unmount());
+  await ui.click(ui.button('Check differences'));
+  const card=ui.container.querySelector('[data-testid="sync-preview"]');
+  const budget=card.querySelector('[data-testid="preview-compaction-budget"]');
+  assert.equal(budget.closest('details'),null);
+  for(const [field,value]of [['messageBudgetTokens','22,938'],['headroomTokens','4,096'],['summaryMaxTokens','4,096'],['retainTokens','3,670'],['thresholdTokens','18,842']]) {
+    assert.ok(budget.querySelector(`[data-budget-field="${field}"]`).textContent.includes(value));
+  }
+  assert.match(budget.textContent,/57\.50%/);
+  assert.match(budget.textContent,/Trigger = min\(80% of context, conversation budget − headroom\)/);
+  const target=card.querySelector('[data-testid="preview-summary-target"]');
+  assert.equal(target.closest('details'),null);
+  assert.match(target.textContent,/2,048 tokens \(4,096 ÷ 2\)/);
+  assert.match(target.textContent,/actual target is also limited by available context and source length/);
+  assert.equal(ui.container.querySelectorAll('[data-testid="summary-target-ceiling"]').length,1);
+  assert.ok(card.querySelector('[data-testid="alignment"]'));
+  ui.setStatus({liveCheck:{state:'unavailable',checkedAt:'2026-10-30T05:01:00Z'}});await ui.poll();
+  assert.equal(card.querySelector('[data-testid="alignment"]'),null);
+  for(const [locale,budgetTitle,targetTitle]of [['zh-Hans','压缩预算','摘要目标（估计）'],['zh-Hant','壓縮預算','摘要目標（估計）']]) {
+    await ui.changeLanguage(locale);assert.ok(budget.textContent.includes(budgetTitle));assert.ok(target.textContent.includes(targetTitle));
+    assert.doesNotMatch(budget.textContent,/Conversation budget|Trigger =/);
+    assert.doesNotMatch(target.textContent,/Preview ceiling|Summary target/);
+  }
+  assert.ok(ui.calls.every(call=>['status','preview'].includes(call.name)));
 });

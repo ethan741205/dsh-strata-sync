@@ -11,10 +11,14 @@ Validation date: 2026-10-30 (Asia/Taipei).
 
 ## Automated verification
 
-All **171 automated tests pass** for the current runtime. Coverage includes:
+All **184 automated tests pass** for version 0.11.0. Coverage includes:
+
+- Runtime monitoring on a separate 60-second timer, including while Settings is closed and Agent tasks run. It makes metadata GET requests only: no configuration writes, backups, preset activation or inference. Startup synchronization still runs once.
+- Loaded-model switches, context/output changes, manual acknowledgement of an already configured model, explicit synchronization, transient failure/recovery, incomplete metadata, cancellation, overlapping checks, hot reload, concurrent edits and late responses. Failed or mixed metadata cannot produce a live aligned status.
+- Three-language runtime warnings and recovery, historical-success suppression, main-preview conversation/headroom/summary/retention budgets, effective threshold and formula, summary target ceilings and default-disabled/native fallback states.
 
 - Current DeepSeek recognition accepts the `Strata ds4-0.1` build format and the reviewed served-template fingerprint. Unknown/malformed identities, wrong model aliases and unreviewed templates remain unconfirmed. Both legacy DeepSeek choices and the new `medium` choice are covered.
-- Authenticated metadata-only checks against the running DeepSeek Huihui 2.00 bpw server confirmed 65,536 context, unlimited server output, a 19,660-token fallback, text/image input and `off / low / medium / high / max`, without warnings or configuration changes. No inference request was sent.
+- The prior authenticated metadata-only compatibility check against DeepSeek Huihui 2.00 bpw confirmed 65,536 context, unlimited server output, a 19,660-token fallback, text/image input and `off / low / medium / high / max`, without warnings or configuration changes. No inference request was sent.
 - Qwen and current DeepSeek retain their respective family choices across quantization labels. The three-language UI shows every current DeepSeek option, including `medium`, without introducing Qwen's `xhigh`.
 
 - Automatic output matches Strata's 30% formula with a 4,096 floor and 32,768 ceiling. Tests cover 8K through 1M contexts, rounding at the ceiling, unchanged server/manual precedence, valid small-window compaction budgets and all three UI translations. The 8K calculated-output case limits compaction headroom and summary cap to 2,048; 32K and larger retain 4,096.
@@ -32,6 +36,6 @@ The package verifier checks the public file list, English root README selection,
 
 The integration targets **DSH Desktop 0.2.1-rc.3**, Cordis 4.0.5 and pi-ai 1.1.0. Native-host preview, synchronization, backup and interface checks used an isolated DSH profile and metadata-only fixture server. Native-summary integration probes used synthetic adapter responses.
 
-These checks validate configuration, dispatch and preservation of native behavior. They do **not** establish that real models always follow the writing target, never truncate, or compact at an optimal frequency. No inference benchmark was run for this release. Server configuration and the user's running DSH profile were not changed.
+These checks validate configuration, dispatch and preservation of native behavior. Runtime model-switch monitoring and Settings states were verified with mocked server responses and rendered UI tests, not by switching the user's live model. They do **not** establish that real models always follow the writing target, never truncate, or compact at an optimal frequency. No inference benchmark was run for this release. Server configuration and the user's running DSH profile were not changed.
 
 Existing conversations retain their Agent preset revision; start a new conversation after synchronizing model settings.

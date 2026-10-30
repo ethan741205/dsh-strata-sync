@@ -56,27 +56,30 @@ async function harness(options = {}) {
       ] },
     } });
   }
-  let poll, requests = 0, writes = 0;
+  let requests = 0, writes = 0;
+  const timers = new Map();
   const routes = new Map();
   let running = false;
   const effects = [];
   const callbacks = {};
   const realInterval = globalThis.setInterval, realClear = globalThis.clearInterval, realFetch = globalThis.fetch;
-  globalThis.setInterval = (fn) => {
+  globalThis.setInterval = (fn, delay) => {
     // Real timers retain the AsyncLocalStorage context of their creation site.
     const scope = AsyncLocalStorage.snapshot();
-    poll = () => scope(fn);
-    return { unref() {} };
+    const timer = { unref() {} };
+    timers.set(timer, { run: () => scope(fn), delay });
+    return timer;
   };
-  globalThis.clearInterval = () => {};
+  globalThis.clearInterval = timer => timers.delete(timer);
   globalThis.fetch = async (url, init) => {
     requests++;
     assert.equal(init.method, 'GET');
     assert.equal(init.headers.Authorization, 'Bearer do-not-expose-test-secret');
-    if (options.beforeFetch) await options.beforeFetch(url);
+    if (options.beforeFetch) await options.beforeFetch(url, init);
     if (options.serverStatus) return new Response('private server error body must not be shown', { status: options.serverStatus });
     if (url.includes('/props?') && options.props) return new Response(JSON.stringify(options.props()),{headers:{'content-type':'application/json'}});
-    return new Response(JSON.stringify(url.endsWith('/models') ? { data: [{ id: 'qwen', status: { value: 'loaded' }, meta: { n_ctx: 32768 }, ...(options.modalities ? {architecture:{input_modalities:options.modalities}} : {}) }] } : [{ n_ctx: 32768 }]), { status: 200, headers: { 'content-type': 'application/json' } });
+    const model = options.model?.() ?? { id: 'qwen', context: 32768 };
+    return new Response(JSON.stringify(url.endsWith('/models') ? { data: [{ id: model.id, status: { value: 'loaded' }, meta: { n_ctx: model.context }, ...(options.modalities ? {architecture:{input_modalities:options.modalities}} : {}) }] } : [{ n_ctx: model.context }]), { status: 200, headers: { 'content-type': 'application/json' } });
   };
   const ctx = {
     configEditor: {
@@ -119,8 +122,10 @@ async function harness(options = {}) {
   };
   const dispose = () => { for (const cleanup of effects.splice(0)) cleanup?.(); };
   return { call, raw, entries, ctx, dispose, preStep: next => callbacks['agent/pre-step']({},next), stream: (options, next) => callbacks['llm/stream'](options, next), get requests() { return requests; }, get writes() { return writes; },
-    reload: () => { dispose(); poll=undefined; apply(ctx, entries[3].options.config); }, setRunning: value => { running = value; },
-    poll: async () => { poll?.(); for (let i = 0; i < 25; i++) { await new Promise(resolve => setTimeout(resolve, 5)); } },
+    reload: () => { dispose(); apply(ctx, entries[3].options.config); }, setRunning: value => { running = value; },
+    poll: async () => { for (const timer of timers.values()) if (timer.delay === 1000) timer.run(); for (let i = 0; i < 25; i++) { await new Promise(resolve => setTimeout(resolve, 5)); } },
+    monitor: async () => { for (const timer of [...timers.values()]) if (timer.delay === 60000) await timer.run(); },
+    timerCount: () => timers.size,
     backupCount: async () => { try { return (await readdir(join(dir, 'backups', 'strata-sync'))).length; } catch { return 0; } },
     close: async () => { dispose(); globalThis.setInterval = realInterval; globalThis.clearInterval = realClear; globalThis.fetch = realFetch; await rm(dir, { recursive: true, force: true }); },
   };
@@ -481,11 +486,195 @@ test('a failed second config write rolls the first config back', async () => {
   } finally { await h.close(); }
 });
 
-test('startup sync runs during tasks and performs no further server reads', async () => {
+test('startup sync runs once during tasks; only the separate read-only monitor repeats checks', async () => {
   const h = await harness({ autoSync: true }); try {
     h.setRunning(true); await h.poll(); assert.equal(await h.backupCount(), 1);
     const writes = h.writes, requests = h.requests;
     await h.poll(); assert.equal(await h.backupCount(), 1); assert.equal(h.writes, writes); assert.equal(h.requests,requests);
+    await h.monitor(); assert.ok(h.requests > requests); assert.equal(h.writes, writes); assert.equal(await h.backupCount(), 1);
+  } finally { await h.close(); }
+});
+
+test('runtime checks detect model switches without Settings open, writes, backups or inference', async () => {
+  let model = { id: 'qwen', context: 32768 };
+  const h = await harness({ model: () => model, presets: ['standard'], props: () => ({ ...verifiedProps(), model_alias: model.id }) });
+  try {
+    h.setRunning(true);
+    const initial = structuredClone(h.entries.map(row => row.options.config));
+    let activations = 0;
+    h.ctx.agentPresets.resolve = async () => { activations++; return {}; };
+    await h.monitor();
+    assert.equal((await h.call('status')).value.liveCheck.state, 'mismatch');
+    model = { id: 'deepseek', context: 65536 };
+    await h.monitor();
+    const status = (await h.call('status')).value;
+    assert.equal(status.liveCheck.modelId, 'deepseek');
+    assert.equal(status.liveCheck.contextWindow, 65536);
+    assert.equal(status.liveCheck.modelChanged, true);
+    assert.equal(status.liveCheck.previousModelId, 'qwen');
+    assert.ok(status.liveCheck.changes.some(row => row.field === 'model'));
+    assert.equal(status.lastPreview, null);
+    assert.equal(activations, 0);
+    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
+    assert.deepEqual(h.entries.map(row => row.options.config), initial);
+    assert.ok(!JSON.stringify(status.liveCheck).includes('do-not-expose-test-secret'));
+  } finally { await h.close(); }
+});
+
+test('same-model context and output changes warn; explicit sync acknowledges and clears the warning', async () => {
+  let model = { id: 'qwen', context: 32768 }, cap = -1;
+  const h = await harness({ model: () => model, props: () => ({ ...verifiedProps(), default_generation_settings: { params: { n_predict: cap } } }) });
+  const sync = async () => {
+    const p = await h.call('preview'); assert.equal(p.ok, true);
+    const r = await h.call('apply', { fingerprint: p.value.fingerprint }); assert.equal(r.ok, true);
+  };
+  try {
+    await sync(); await h.monitor();
+    assert.equal((await h.call('status')).value.liveCheck.state, 'aligned');
+    model = { id: 'qwen', context: 65536 };
+    await h.monitor();
+    let live = (await h.call('status')).value.liveCheck;
+    assert.equal(live.state, 'mismatch'); assert.equal(live.modelChanged, true);
+    assert.equal(live.previousContextWindow, 32768);
+    await sync();
+    assert.equal((await h.call('status')).value.liveCheck.state, 'aligned');
+    cap = 8192; await h.monitor();
+    live = (await h.call('status')).value.liveCheck;
+    assert.equal(live.state, 'mismatch'); assert.equal(live.modelChanged, false);
+    assert.ok(live.changes.some(row => row.field === 'outputTokens'));
+    await sync(); await h.monitor();
+    assert.equal((await h.call('status')).value.liveCheck.state, 'aligned');
+  } finally { await h.close(); }
+});
+
+test('manual check acknowledges an already configured model switch with following disabled', async () => {
+  let model = { id: 'qwen', context: 32768 };
+  const h = await harness({ model: () => model, props: () => ({ ...verifiedProps(), model_alias: model.id }) });
+  const sync = async () => {
+    const p = await h.call('preview');
+    assert.equal((await h.call('apply', { fingerprint: p.value.fingerprint })).ok, true);
+  };
+  try {
+    h.entries[3].options.config.followLoadedModel = false;
+    await sync();
+    model = { id: 'other-model', context: 32768 }; await sync();
+    model = { id: 'qwen', context: 32768 }; await h.monitor();
+    let live = (await h.call('status')).value.liveCheck;
+    assert.equal(live.state, 'mismatch'); assert.equal(live.modelChanged, true);
+    assert.deepEqual(live.changes, []);
+    const writes = h.writes, backups = await h.backupCount();
+    const p = await h.call('preview'); assert.deepEqual(p.value.changes, []);
+    live = (await h.call('status')).value.liveCheck;
+    assert.equal(live.state, 'aligned'); assert.equal(live.modelChanged, false);
+    assert.equal(h.writes, writes); assert.equal(await h.backupCount(), backups);
+  } finally { await h.close(); }
+});
+
+test('runtime unavailable status clears stale success, hides private exceptions and recovers', async () => {
+  let offline = false;
+  const h = await harness({ props: verifiedProps, beforeFetch: async () => { if (offline) throw Error('private token do-not-expose-test-secret'); } });
+  try {
+    const p = await h.call('preview'); await h.call('apply', { fingerprint: p.value.fingerprint });
+    await h.monitor(); assert.equal((await h.call('status')).value.liveCheck.state, 'aligned');
+    offline = true; await h.monitor();
+    const status = (await h.call('status')).value;
+    assert.equal(status.liveCheck.state, 'unavailable');
+    assert.equal(status.liveCheck.modelId, undefined);
+    assert.ok(!JSON.stringify(status.liveCheck).includes('do-not-expose-test-secret'));
+    assert.equal(status.lastError, null);
+    offline = false; await h.monitor();
+    assert.equal((await h.call('status')).value.liveCheck.state, 'aligned');
+  } finally { await h.close(); }
+});
+
+test('partial metadata failures and mixed model identities never certify live alignment', async () => {
+  let mode = 'ok';
+  const h = await harness({ props: () => ({ ...verifiedProps(), ...(mode === 'alias' ? { model_alias: 'changed-during-check' } : {}) }),
+    beforeFetch: async url => {
+      if ((mode === 'props' && url.includes('/props?')) || (mode === 'slots' && url.endsWith('/slots'))) throw Error('private network details');
+    } });
+  try {
+    const p = (await h.call('preview')).value; await h.call('apply', { fingerprint: p.fingerprint });
+    for (const failure of ['props', 'slots', 'alias']) {
+      mode = failure; await h.monitor();
+      const live = (await h.call('status')).value.liveCheck;
+      assert.equal(live.state, 'unavailable', failure);
+      assert.equal(live.error.code, 'INCOMPLETE_METADATA');
+      assert.ok(!JSON.stringify(live).includes('private network details'));
+      mode = 'ok'; await h.monitor();
+      assert.equal((await h.call('status')).value.liveCheck.state, 'aligned');
+    }
+  } finally { await h.close(); }
+});
+
+test('runtime polling never overlaps and is aborted and removed on disposal', async () => {
+  let release, signal;
+  const gate = new Promise(resolve => { release = resolve; });
+  const h = await harness({ beforeFetch: async (url, init) => { if (url.endsWith('/models')) { signal = init.signal; await gate; } } });
+  try {
+    const pending = h.monitor();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await h.monitor(); assert.equal(h.requests, 1);
+    assert.equal(h.timerCount(), 1);
+    h.dispose(); assert.equal(signal.aborted, true); assert.equal(h.timerCount(), 0);
+    release(); await pending;
+    assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
+  } finally { release(); await h.close(); }
+});
+
+test('monitor leaves manual preview intact and skips checks while an explicit operation runs', async () => {
+  let block = false, release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const h = await harness({ beforeFetch: async url => { if (block && url.endsWith('/models')) await gate; } });
+  try {
+    const p = (await h.call('preview')).value;
+    await h.monitor();
+    assert.equal((await h.call('status')).value.lastPreview.fingerprint, p.fingerprint);
+    block = true;
+    const pending = h.call('preview'); await new Promise(resolve => setTimeout(resolve, 10));
+    const requests = h.requests; await h.monitor(); assert.equal(h.requests, requests);
+    release(); await pending;
+    assert.equal(h.writes, 0);
+  } finally { release(); await h.close(); }
+});
+
+test('monitor rejects a snapshot changed during discovery instead of showing stale alignment', async () => {
+  let mutate = false;
+  const h = await harness({ beforeFetch: async url => {
+    if (mutate && url.endsWith('/models')) h.entries[0].options.config.providers['strata-server'].models[0].contextWindow = 12345;
+  } });
+  try {
+    const p = (await h.call('preview')).value; await h.call('apply', { fingerprint: p.fingerprint });
+    mutate = true; await h.monitor();
+    const live = (await h.call('status')).value.liveCheck;
+    assert.equal(live.state, 'unavailable'); assert.equal(live.error.code, 'stale-preview');
+  } finally { await h.close(); }
+});
+
+test('a delayed monitor failure cannot overwrite a newer explicit synchronization result', async () => {
+  let blockNext = true, release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const h = await harness({ props: verifiedProps, beforeFetch: async url => {
+    if (blockNext && url.endsWith('/models')) { blockNext = false; await gate; throw Error('old connection failed'); }
+  } });
+  try {
+    const pending = h.monitor(); await new Promise(resolve => setTimeout(resolve, 10));
+    const p = (await h.call('preview')).value;
+    assert.equal((await h.call('apply', { fingerprint: p.fingerprint })).ok, true);
+    release(); await pending;
+    assert.equal((await h.call('status')).value.liveCheck.state, 'aligned');
+  } finally { release(); await h.close(); }
+});
+
+test('unconfigured monitor makes no requests; hot reload keeps exactly one monitoring timer', async () => {
+  const h = await harness();
+  try {
+    h.entries[3].options.config.providerId = 'missing';
+    await h.monitor(); assert.equal(h.requests, 0);
+    assert.equal((await h.call('status')).value.liveCheck.state, 'unconfigured');
+    h.reload(); assert.equal(h.timerCount(), 1);
+    h.entries[3].options.config.providerId = 'strata-server';
+    await h.monitor(); assert.equal(h.requests, 3);
   } finally { await h.close(); }
 });
 
