@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Context, Service } from '@deepseek-ai/cordis';
-import { estimateSummarySource, installSummaryGuidance, MIN_SUMMARY_TARGET,
+import { clampMaxTokensToContext } from '@earendil-works/pi-ai/api/simple-options';
+import { estimateEffectiveSummaryBudget, estimateSummarySource, installSummaryGuidance, MIN_SUMMARY_TARGET,
   nativeSummaryMessage, planSummaryTarget, summaryInstruction } from '../src/summary.mjs';
 
 // Public native instruction from @deepseek-ai/dsh-compaction-basic 0.2.1-rc.3
@@ -34,7 +35,7 @@ const fixture = (changes = {}) => ({
   ],
   ...changes,
 });
-async function installed(t, resolveContext = async () => 32768, getSettings) {
+async function installed(t, resolveContext = async () => 32768, getSettings = () => ({summaryGuidance:true})) {
   const ctx = new Context();
   const llm = new Service(ctx, 'llm');
   const fiber = ctx.plugin(child => installSummaryGuidance(child, resolveContext, getSettings));
@@ -56,56 +57,114 @@ async function collect(stream) {
   return result;
 }
 
-test('summary target follows context, real hard cap, and source bounds', () => {
-  assert.equal(planSummaryTarget(32768, 4096, 12000), 2048);
-  assert.equal(planSummaryTarget(65536, 4096, 12000), 2048);
-  assert.equal(planSummaryTarget(131072, 4096, 12000), 2048);
-  assert.equal(planSummaryTarget(65536, 1024, 12000), 512);
-  assert.equal(planSummaryTarget(65536, 4096, 1501), 750);
-  for (const context of [8192, 32768, 65536, 131072]) {
-    for (const cap of [512, 1024, 4096, 8192]) {
-      for (const source of [512, 1001, 2048, 10000]) {
-        const target = planSummaryTarget(context, cap, source);
-        if (target === null) continue;
-        assert.ok(Number.isInteger(target));
-        assert.ok(target <= context / 16 && target <= cap / 2 && target <= source / 2);
-      }
+test('target uses only the effective output budget and source length, both at 50% by default', () => {
+  assert.equal(planSummaryTarget(4096, 12000), 2048);
+  assert.equal(planSummaryTarget(8192, 12000), 4096);
+  assert.equal(planSummaryTarget(1024, 12000), 512);
+  assert.equal(planSummaryTarget(4096, 1501), 750);
+  for (const cap of [512, 1024, 4096, 8192]) {
+    for (const source of [512, 1001, 2048, 10000]) {
+      const target = planSummaryTarget(cap, source);
+      if (target !== null) assert.ok(Number.isInteger(target) && target <= cap / 2 && target <= source / 2);
     }
   }
 });
 
 test('tiny or unknown targets are not rounded up or invented', () => {
   assert.equal(MIN_SUMMARY_TARGET, 256);
-  assert.equal(planSummaryTarget(32768, 4096, 512), 256);
-  assert.equal(planSummaryTarget(32768, 4096, 511), null);
-  assert.equal(planSummaryTarget(32768, 511, 9000), null);
-  for (const invalid of [undefined, null, 0, -1, 1.5, NaN, Infinity, '32768', Number.MAX_SAFE_INTEGER + 1]) {
-    assert.equal(planSummaryTarget(invalid, 4096, 8000), null);
-    assert.equal(planSummaryTarget(32768, invalid, 8000), null);
-    assert.equal(planSummaryTarget(32768, 4096, invalid), null);
+  assert.equal(planSummaryTarget(4096, 512), 256);
+  assert.equal(planSummaryTarget(4096, 511), null);
+  assert.equal(planSummaryTarget(511, 9000), null);
+  for (const invalid of [undefined, null, 0, -1, 1.5, NaN, Infinity, '4096', Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(planSummaryTarget(invalid, 8000), null);
+    assert.equal(planSummaryTarget(4096, invalid), null);
   }
   assert.throws(() => summaryInstruction(0), TypeError);
   assert.throws(() => summaryInstruction(1.5), TypeError);
 });
 
-test('custom divisors change the context contribution while preserving hard-cap and source bounds', () => {
-  assert.equal(planSummaryTarget(32768, 8192, 12000, 8), 4096);
-  assert.equal(planSummaryTarget(32768, 4096, 12000, 32), 1024);
-  assert.equal(planSummaryTarget(32768, 4096, 12000, 1), 2048);
-  assert.equal(planSummaryTarget(32768, 4096, 1000, 8), 500);
-  assert.equal(planSummaryTarget(32768, 4096, 12000, 129), null);
-  for (const invalid of [null, 0, -1, 0.5, NaN, Infinity, '16', Number.MAX_SAFE_INTEGER + 1]) {
-    assert.equal(planSummaryTarget(32768, 4096, 12000, invalid), null);
+test('fractional divisors are independently applied and floored', () => {
+  assert.equal(planSummaryTarget(4096, 12000, 1.5, 2.5), 2730);
+  assert.equal(planSummaryTarget(4096, 1000, 1.5, 2.5), 400);
+  assert.equal(planSummaryTarget(4096, 12000, 1, 1), 4096);
+  for (const bad of [0.5, NaN, Infinity, null, '2', Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(planSummaryTarget(4096, 12000, bad, 2), null);
+    assert.equal(planSummaryTarget(4096, 12000, 2, bad), null);
   }
 });
 
-test('fractional divisors are independently applied, floored, and never exceed source or hard cap', () => {
-  assert.equal(planSummaryTarget(32768, 4096, 12000, 8.5, 1.5, 2.5), 2730);
-  assert.equal(planSummaryTarget(32768, 4096, 1000, 8.5, 1.5, 2.5), 400);
-  assert.equal(planSummaryTarget(32768, 4096, 12000, 16.5, 1, 1), 1985);
-  for (const bad of [0.5, NaN, Infinity, null, '2', Number.MAX_SAFE_INTEGER + 1]) {
-    assert.equal(planSummaryTarget(32768, 4096, 12000, 16, bad, 2), null);
-    assert.equal(planSummaryTarget(32768, 4096, 12000, 16, 2, bad), null);
+test('effective budget stays below the downstream pi-ai clamp, including the supplemental prompt', () => {
+  for (const contextWindow of [16384, 32768, 65536]) {
+    for (const chars of [2000, 24000, 86000, 110000]) {
+      const options = fixture();
+      options.messages[1].content[0].text = 'x'.repeat(chars);
+      // The real adapter removes leading system history into systemPrompt,
+      // flattens user text, and zeroes replayed usage. Test against pi-ai itself.
+      const budget = estimateEffectiveSummaryBudget(options, contextWindow);
+      assert.ok(budget >= 0 && budget <= options.maxTokens);
+      const target = planSummaryTarget(budget, estimateSummarySource(options.messages));
+      const piContext = { messages: options.messages.slice(1).map((message, index) => ({
+        role: 'user', timestamp: 0, content: message.content[0].text +
+          (index === 1 && target !== null ? '\n- ' + summaryInstruction(target) : ''),
+      })) };
+      const nativeCap = clampMaxTokensToContext({ contextWindow }, piContext, options.maxTokens);
+      assert.ok(budget <= nativeCap, `${contextWindow}/${chars}: budget ${budget} > native cap ${nativeCap}`);
+      if (target !== null) assert.ok(target <= nativeCap / 2);
+    }
+  }
+});
+
+test('full prompt costs and tool schemas reduce remaining output room, but not the source length', () => {
+  const options = fixture();
+  options.messages[1].content[0].text = 'x'.repeat(86000);
+  const source = estimateSummarySource(options.messages);
+  const before = estimateEffectiveSummaryBudget(options, 32768);
+  assert.ok(before > 512 && before < 4096);
+  const withSystem = { ...options, system: 's'.repeat(2000) };
+  const withTools = { ...options, tools: [{ name: 'read', description: 't'.repeat(2000) }] };
+  for (const request of [withSystem, withTools]) {
+    assert.ok(estimateEffectiveSummaryBudget(request, 32768) < before);
+    assert.equal(estimateSummarySource(request.messages), source);
+  }
+  assert.ok(estimateEffectiveSummaryBudget(options, 32768, '{target}'.repeat(200)) < before);
+  assert.equal(estimateEffectiveSummaryBudget(options, 65536), 4096);
+  for (const malformed of [{ ...options, system: {} }, { ...options, tools: {} },
+    { ...options, messages: [{ role: 'user', content: [{ type: 'image' }] }] }]) {
+    assert.equal(estimateEffectiveSummaryBudget(malformed, 32768), null);
+  }
+});
+
+test('legacy context divisor is ignored; default-disabled guidance still does no discovery', async t => {
+  for (const legacy of [1, 16, 32, 1000, null]) {
+    const harness = await installed(t, async () => 32768, () => ({ summaryGuidance: true, summaryContextDivisor: legacy }));
+    const options = fixture();
+    await collect(harness.stream(options, async function* (request) {
+      assert.match(request.messages.at(-1).content[0].text, /target of 2048 tokens/); yield {};
+    }));
+  }
+  let calls = 0;
+  const disabled = await installed(t, async () => { calls++; return 32768; }, () => ({ summaryContextDivisor: 16 }));
+  const options = fixture(), original = options.messages;
+  await collect(disabled.stream(options, async function* (request) {
+    assert.strictEqual(request.messages, original); yield {};
+  }));
+  assert.equal(calls, 0);
+});
+
+test('near-full context reduces the live writing target; exhausted room preserves native behavior', async t => {
+  const harness = await installed(t);
+  for (const length of [86000, 110000]) {
+    const options = fixture();
+    options.messages[1].content[0].text = 'x'.repeat(length);
+    const original = options.messages;
+    await collect(harness.stream(options, async function* (request) {
+      if (length === 86000) {
+        const target = Number(request.messages.at(-1).content[0].text.match(/target of (\d+) tokens/)[1]);
+        assert.ok(target >= 256 && target < 2048);
+      } else assert.strictEqual(request.messages, original);
+      assert.equal(request.maxTokens, 4096); yield {};
+    }));
+    assert.strictEqual(options.messages, original);
   }
 });
 
@@ -117,7 +176,7 @@ test('custom template is literal text and missing placeholders or excessive leng
 test('custom guidance is appended only once across duplicate hooks and restored afterwards', async t => {
   let metadataCalls = 0;
   const resolve = async () => { metadataCalls++; return 32768; };
-  const settings = () => ({ summaryPromptTemplate: 'Use at most {target} tokens.\nKeep the next step.', summaryOutputDivisor: 1.5, summaryContextDivisor: 8.5 });
+  const settings = () => ({ summaryGuidance: true, summaryPromptTemplate: 'Use at most {target} tokens.\nKeep the next step.', summaryOutputDivisor: 1.5 });
   const harness = await installed(t, resolve, settings);
   const second = harness.ctx.plugin(child => installSummaryGuidance(child, resolve, settings));
   await second.await(); t.after(() => second.dispose());
@@ -130,8 +189,8 @@ test('custom guidance is appended only once across duplicate hooks and restored 
 });
 
 test('disabled, invalid or unavailable preferences preserve native compaction without metadata', async t => {
-  for (const setting of [{ summaryGuidance: false }, { summaryGuidance: 'true' },
-    { summaryContextDivisor: 0 }, { summaryContextDivisor: null },
+  for (const setting of [{}, { summaryGuidance: false }, { summaryGuidance: 'true' },
+    { summaryGuidance: true, summaryOutputDivisor: 0 }, { summaryGuidance: true, summarySourceDivisor: null },
     { summaryOutputDivisor: 0.5 }, { summarySourceDivisor: Infinity }, { summaryPromptTemplate: 'Missing placeholder' }, null]) {
     let discovery = 0, calls = 0;
     const harness = await installed(t, async () => { discovery++; return 32768; }, () => setting);
@@ -145,10 +204,10 @@ test('disabled, invalid or unavailable preferences preserve native compaction wi
 });
 
 test('preferences are read per summary and the original prompt is restored between calls', async t => {
-  let settings = { summaryGuidance: true, summaryContextDivisor: 32 };
+  let settings = { summaryGuidance: true, summaryOutputDivisor: 4 };
   const harness = await installed(t, async () => 32768, () => settings);
-  for (const [enabled, divisor, target] of [[true, 32, 1024], [false, 32, null], [true, 16, 2048]]) {
-    settings = { summaryGuidance: enabled, summaryContextDivisor: divisor };
+  for (const [enabled, divisor, target] of [[true, 4, 1024], [false, 4, null], [true, 2, 2048]]) {
+    settings = { summaryGuidance: enabled, summaryOutputDivisor: divisor };
     const options = fixture(), original = options.messages;
     await collect(harness.stream(options, async function* (request) {
       assert.equal(request.messages.at(-1).content[0].text, target === null ? nativePrompt : `${nativePrompt}\n- ${summaryInstruction(target)}`);
@@ -159,8 +218,8 @@ test('preferences are read per summary and the original prompt is restored betwe
 });
 
 test('disabling guidance or changing its divisor during discovery skips stale supplementation', async t => {
-  for (const change of [{ summaryGuidance: false, summaryContextDivisor: 16 }, { summaryGuidance: true, summaryContextDivisor: 32 }]) {
-    let settings = { summaryGuidance: true, summaryContextDivisor: 16 };
+  for (const change of [{ summaryGuidance: false, summaryOutputDivisor: 2 }, { summaryGuidance: true, summaryOutputDivisor: 4 }]) {
+    let settings = { summaryGuidance: true, summaryOutputDivisor: 2 };
     const harness = await installed(t, async () => { settings = change; return 32768; }, () => settings);
     const options = fixture(), original = options.messages;
     await collect(harness.stream(options, async function* (request) {
@@ -239,7 +298,7 @@ test('real Cordis stream appends exactly one sentence and restores all native op
   assert.strictEqual(options.messages, originals.messages);
 });
 
-test('each summary recalculates from its actual hard cap and selected content', async t => {
+test('each summary recalculates from its requested cap, available context and selected content', async t => {
   let calls = 0;
   const harness = await installed(t, async () => { calls++; return calls === 1 ? 32768 : 65536; });
   const observed = [];

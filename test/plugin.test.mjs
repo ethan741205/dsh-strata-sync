@@ -12,12 +12,14 @@ const COMPACT = '@deepseek-ai/dsh-compaction-basic';
 const DEFAULT = '@deepseek-ai/dsh-agent-default-model';
 const PRESET = '@deepseek-ai/dsh-agent-preset';
 test('native config schema supplies summary defaults and validates persisted preferences', () => {
-  assert.equal(Config({}).summaryGuidance, true);
-  assert.equal(Config({}).summaryContextDivisor, 16);
-  assert.equal(Config({ summaryGuidance: false, summaryContextDivisor: 32 }).summaryGuidance, false);
+  assert.equal(Config({}).summaryGuidance, false);
+  assert.equal(Config({}).summaryContextDivisor, undefined);
+  assert.equal(Config({ summaryContextDivisor: 16 }).summaryGuidance, false);
+  assert.equal(Config({}).summaryOutputDivisor, 2);
+  assert.equal(Config({ summaryGuidance: false, summaryOutputDivisor: 4 }).summaryGuidance, false);
   assert.equal(Config({ summaryOutputDivisor: 1.5 }).summaryOutputDivisor, 1.5);
   assert.equal(Config({}).summarySourceDivisor, 2);
-  for (const config of [{ summaryGuidance: 'true' }, ...[0, -1, 0.5, '16', Number.MAX_SAFE_INTEGER + 1].map(summaryContextDivisor => ({ summaryContextDivisor }))]) {
+  for (const config of [{ summaryGuidance: 'true' }, ...[0, -1, 0.5, '16', Number.MAX_SAFE_INTEGER + 1].map(summaryOutputDivisor => ({ summaryOutputDivisor }))]) {
     assert.throws(() => Config(config));
   }
 });
@@ -37,7 +39,7 @@ async function harness(options = {}) {
       { provider: 'cloud', model: 'cloud-model', maxTokens: 8192, headroomTokens: 8192 },
     ] } } },
     { options: { id: 'agent-default-model', name: DEFAULT, config: { provider: 'strata-server', model: 'qwen', keepCustom: true } } },
-    { options: { id: 'strata-sync', name: PKG, config: { providerId: 'strata-server', autoSync: !!options.autoSync, followLoadedModel: true } } },
+    { options: { id: 'strata-sync', name: PKG, config: { providerId: 'strata-server', autoSync: !!options.autoSync, followLoadedModel: true, summaryGuidance: true } } },
   ];
   for (const entry of entries) entry.fiber = { state: 2 };
   if (options.presets) {
@@ -128,8 +130,8 @@ const nativeSummaryPrompt = () => readFile(new URL('./fixtures/native-summary-in
 async function summaryRequest(overrides = {}) {
   return { provider: 'strata-server', model: 'qwen', purpose: 'compaction', maxTokens: 4096,
     sessionId: 'test-summary', messages: [
-      { role: 'system', content: [{ type: 'text', text: 'System prompt is not compactable.'.repeat(400) }] },
-      { role: 'user', content: [{ type: 'text', text: 'Selected history. '.repeat(4000) }] },
+      { role: 'system', content: [{ type: 'text', text: 'System prompt is not compactable.'.repeat(40) }] },
+      { role: 'user', content: [{ type: 'text', text: 'Selected history. '.repeat(1000) }] },
       { role: 'user', content: [{ type: 'text', text: await nativeSummaryPrompt() }] },
     ], ...overrides };
 }
@@ -190,40 +192,45 @@ test('unverified servers and model edits during discovery leave native summaries
   }
 });
 
-test('summary target respects a smaller existing client context without syncing any settings', async () => {
+test('a smaller client window still permits the full target when enough output room remains', async () => {
   const h = await harness({ props: verifiedProps });
   try {
     h.entries[0].options.config.providers['strata-server'].models[0].contextWindow = 16384;
     const options = await summaryRequest();
     for await (const _ of h.stream(options, async function* () {
-      assert.match(options.messages.at(-1).content[0].text,/target of 1024 tokens/); yield {};
+      assert.match(options.messages.at(-1).content[0].text,/target of 2048 tokens/); yield {};
     })) {}
     assert.equal(h.writes,0);
   } finally { await h.close(); }
 });
 
-test('summary preferences default on, save independently, survive reload and control native requests', async () => {
+test('summary preferences default off, save independently, survive reload and control native requests', async () => {
   const h = await harness({ props: verifiedProps });
   try {
+    delete h.entries[3].options.config.summaryGuidance;
+    h.reload();
     const initial = (await h.call('status')).value;
-    assert.equal(initial.summaryGuidance, true);
-    assert.equal(initial.summaryContextDivisor, 16);
+    assert.equal(initial.summaryGuidance, false);
+    const native = await summaryRequest(), beforeNative = structuredClone(native);
+    for await (const _ of h.stream(native, async function* () { assert.deepEqual(native,beforeNative); yield {}; })) {}
+    assert.equal(h.requests,0);
+    assert.equal(initial.summaryOutputDivisor, 2);
     const others = structuredClone(h.entries.slice(0, 3));
-    const saved = await h.call('configure', { expectedRevision: initial.settingsRevision, summaryGuidance: false, summaryContextDivisor: 32 });
+    const saved = await h.call('configure', { expectedRevision: initial.settingsRevision, summaryGuidance: false, summaryOutputDivisor: 4 });
     assert.equal(saved.ok, true);
     assert.equal(saved.value.summaryGuidance, false);
-    assert.equal(saved.value.summaryContextDivisor, 32);
+    assert.equal(saved.value.summaryOutputDivisor, 4);
     assert.deepEqual(h.entries.slice(0, 3), others);
     assert.equal(await h.backupCount(), 1);
     h.reload();
     const off = (await h.call('status')).value;
-    assert.equal(off.summaryGuidance, false); assert.equal(off.summaryContextDivisor, 32);
+    assert.equal(off.summaryGuidance, false); assert.equal(off.summaryOutputDivisor, 4);
     const options = await summaryRequest(), original = structuredClone(options);
     let calls = 0;
     for await (const _ of h.stream(options, async function* () { calls++; assert.deepEqual(options, original); yield {}; })) {}
     assert.equal(calls, 1); assert.equal(h.requests, 0);
     const enabled = await h.call('configure', { expectedRevision: off.settingsRevision, summaryGuidance: true });
-    assert.equal(enabled.value.summaryContextDivisor, 32);
+    assert.equal(enabled.value.summaryOutputDivisor, 4);
     h.reload();
     for await (const _ of h.stream(options, async function* () {
       assert.match(options.messages.at(-1).content[0].text, /target of 1024 tokens/); yield {};
@@ -239,14 +246,14 @@ test('summary preference validation rejects invalid values before backup and rev
   try {
     const initial = (await h.call('status')).value;
     for (const patch of [{ summaryGuidance: null }, { summaryGuidance: 1 },
-      ...['summaryContextDivisor', 'summaryOutputDivisor', 'summarySourceDivisor'].flatMap(key => [null, 0, -1, 0.5, '16', Number.MAX_SAFE_INTEGER + 1].map(value => ({ [key]: value }))),
+      ...['summaryOutputDivisor', 'summarySourceDivisor'].flatMap(key => [null, 0, -1, 0.5, '16', Number.MAX_SAFE_INTEGER + 1].map(value => ({ [key]: value }))),
       ...[null, '', 'No placeholder', '{target}' + 'a'.repeat(2048)].map(summaryPromptTemplate => ({ summaryPromptTemplate }))]) {
       const result = await h.call('configure', { expectedRevision: initial.settingsRevision, ...patch });
       assert.equal(result.ok, false);
       assert.ok(['invalid-budget', 'invalid-request'].includes(result.error.code));
     }
     assert.equal(h.writes, 0); assert.equal(await h.backupCount(), 0);
-    h.entries[3].options.config.summaryContextDivisor = 64;
+    h.entries[3].options.config.summaryOutputDivisor = 64;
     const stale = await h.call('configure', { expectedRevision: initial.settingsRevision, summaryGuidance: false });
     assert.equal(stale.error.code, 'stale-settings');
     assert.equal(h.writes, 0);
@@ -254,7 +261,7 @@ test('summary preference validation rejects invalid values before backup and rev
 });
 
 test('summary preference changes during discovery keep the original request', async () => {
-  for (const patch of [{ summaryGuidance: false }, { summaryContextDivisor: 32 }, { summaryOutputDivisor: 1.5 }, { summarySourceDivisor: 3.5 }, { summaryPromptTemplate: 'Summarize in {target} tokens.' }]) {
+  for (const patch of [{ summaryGuidance: false }, { summaryOutputDivisor: 4 }, { summaryOutputDivisor: 1.5 }, { summarySourceDivisor: 3.5 }, { summaryPromptTemplate: 'Summarize in {target} tokens.' }]) {
     let h;
     h = await harness({ props: verifiedProps, beforeFetch: async url => {
       if (url.endsWith('/models')) Object.assign(h.entries[3].options.config, patch);
@@ -275,17 +282,16 @@ test('custom template and fractional divisors persist, render literally, and res
     const others = structuredClone(h.entries.slice(0, 3));
     const template = 'Condense into {target} tokens. Keep ${literal} and <tags> intact; limit {target}.';
     const saved = await h.call('configure', { expectedRevision: initial.settingsRevision,
-      summaryPromptTemplate: template, summaryContextDivisor: 8.5, summaryOutputDivisor: 1.5, summarySourceDivisor: 2.5 });
+      summaryPromptTemplate: template, summaryOutputDivisor: 1.5, summarySourceDivisor: 2.5 });
     assert.equal(saved.ok, true);
     h.reload();
     const current = (await h.call('status')).value;
     assert.equal(current.summaryPromptTemplate, template);
-    assert.equal(current.summaryContextDivisor, 8.5);
     assert.equal(current.summaryOutputDivisor, 1.5);
     assert.equal(current.summarySourceDivisor, 2.5);
     const options = await summaryRequest(), original = structuredClone(options);
     for await (const _ of h.stream(options, async function* () {
-      assert.equal(options.messages.at(-1).content[0].text, original.messages.at(-1).content[0].text + '\n- ' + template.replaceAll('{target}', '2730'));
+      assert.equal(options.messages.at(-1).content[0].text, original.messages.at(-1).content[0].text + '\n- ' + template.replaceAll('{target}', '1803'));
       assert.equal(options.maxTokens, 4096); yield {};
     })) {}
     const reset = await h.call('configure', { expectedRevision: current.settingsRevision, summaryPromptTemplate: current.defaultSummaryPromptTemplate });

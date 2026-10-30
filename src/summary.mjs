@@ -12,11 +12,9 @@ const augmentedMessages = globalThis[Symbol.for('dsh-strata-sync/summary-augment
 // Eight mandatory headings need enough space for a meaningful checkpoint. Do
 // not round a tiny target UP; leave native behavior intact instead.
 export const MIN_SUMMARY_TARGET = 256;
-export const DEFAULT_SUMMARY_DIVISOR = 16;
-
-export function planSummaryTarget(contextWindow, summaryMaxTokens, sourceTokens, divisor = DEFAULT_SUMMARY_DIVISOR, outputDivisor = 2, sourceDivisor = 2) {
-  if (![contextWindow, summaryMaxTokens, sourceTokens].every(positive) || ![divisor, outputDivisor, sourceDivisor].every(validSummaryDivisor)) return null;
-  const target = Math.floor(Math.min(contextWindow / divisor, summaryMaxTokens / outputDivisor, sourceTokens / sourceDivisor));
+export function planSummaryTarget(effectiveOutputTokens, sourceTokens, outputDivisor = 2, sourceDivisor = 2) {
+  if (![effectiveOutputTokens, sourceTokens].every(positive) || ![outputDivisor, sourceDivisor].every(validSummaryDivisor)) return null;
+  const target = Math.floor(Math.min(effectiveOutputTokens / outputDivisor, sourceTokens / sourceDivisor));
   return target >= MIN_SUMMARY_TARGET ? target : null;
 }
 
@@ -68,6 +66,47 @@ export function estimateSummarySource(messages) {
   return positive(tokens) ? tokens : null;
 }
 
+/** Conservative text-only estimate of the output room before provider dispatch.
+ * The supported DSH adapter uses pi-ai 1.1.0: 3.5 chars/token and
+ * reserves 4096 tokens before clamping maxTokens. Replayed assistant usage is
+ * zeroed by DSH. Include system text, tool schemas and framing as well, even
+ * where that adapter's heuristic omits them. This is NOT a tokenizer count or
+ * the server's final cap; unknown content leaves the native prompt untouched.
+ */
+export function estimateEffectiveSummaryBudget(options, contextWindow, template = DEFAULT_SUMMARY_TEMPLATE) {
+  if (!positive(contextWindow) || !positive(options?.maxTokens) || !validSummaryTemplate(template) || !Array.isArray(options.messages)) return null;
+  const price = text => Math.ceil(text.length / 3.5) + 4;
+  let input = 0;
+  try {
+    if (options.system !== undefined) {
+      if (typeof options.system !== 'string') return null;
+      input += price(options.system);
+    }
+    if (options.tools !== undefined) {
+      if (!Array.isArray(options.tools)) return null;
+      input += price(JSON.stringify(options.tools));
+    }
+    for (const message of options.messages) {
+      if (!['system', 'user', 'assistant', 'tool'].includes(message?.role) || !Array.isArray(message.content)) return null;
+      input += 4;
+      if (message.role === 'tool' && !message.content.some(block => block.type === 'text' && block.text?.length)) input += price('(no output)');
+      for (const block of message.content) {
+        if (['text', 'reasoning'].includes(block?.type) && typeof block.text === 'string') input += price(block.text);
+        else if (block?.type === 'tool-call' && typeof block.name === 'string' && typeof block.arguments === 'string') {
+          // JSON normalization can expand compact numeric literals (e.g. 1e9).
+          const normalized = JSON.stringify(JSON.parse(block.arguments));
+          input += price(block.name) + Math.max(price(block.arguments), price(normalized));
+        } else return null;
+      }
+    }
+    // Reserve the longest possible rendered supplement once, avoiding a
+    // self-referential target calculation. The target never exceeds maxTokens.
+    input += price('\n- ' + summaryInstruction(options.maxTokens, template));
+  } catch { return null; }
+  if (!Number.isSafeInteger(input)) return null;
+  return Math.max(0, Math.min(options.maxTokens, contextWindow - input - 4096));
+}
+
 /** The native waterfall's next() closes over options, so replace only its
  * messages property for the lifetime of this stream; never mutate frozen
  * messages or recursively dispatch a second LLM request.
@@ -77,13 +116,12 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
   function preferences() {
     try {
       const value = getSettings();
-      const enabled = value.summaryGuidance === undefined ? true : value.summaryGuidance;
-      const divisor = value.summaryContextDivisor === undefined ? DEFAULT_SUMMARY_DIVISOR : value.summaryContextDivisor;
+      const enabled = value.summaryGuidance === undefined ? false : value.summaryGuidance;
       const outputDivisor = value.summaryOutputDivisor === undefined ? 2 : value.summaryOutputDivisor;
       const sourceDivisor = value.summarySourceDivisor === undefined ? 2 : value.summarySourceDivisor;
       const template = value.summaryPromptTemplate === undefined ? DEFAULT_SUMMARY_TEMPLATE : value.summaryPromptTemplate;
-      return enabled === true && [divisor, outputDivisor, sourceDivisor].every(validSummaryDivisor) && validSummaryTemplate(template)
-        ? { divisor, outputDivisor, sourceDivisor, template } : null;
+      return enabled === true && [outputDivisor, sourceDivisor].every(validSummaryDivisor) && validSummaryTemplate(template)
+        ? { outputDivisor, sourceDivisor, template } : null;
     } catch { return null; }
   }
   const remove = ctx.on('llm/stream', (options, next) => {
@@ -103,7 +141,8 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
         let contextWindow;
         try { contextWindow = await resolveContext(options); }
         catch { /* Metadata/compatibility failure must not break native inference. */ }
-        const target = planSummaryTarget(contextWindow, options.maxTokens, sourceTokens, selected.divisor, selected.outputDivisor, selected.sourceDivisor);
+        const effectiveOutput = estimateEffectiveSummaryBudget(options, contextWindow, selected.template);
+        const target = planSummaryTarget(effectiveOutput, sourceTokens, selected.outputDivisor, selected.sourceDivisor);
         const current = preferences();
         if (!closed && !options.signal?.aborted && current && Object.keys(selected).every(key => selected[key] === current[key]) && target !== null && options.messages === original) {
           const last = { ...native, content: [{ ...native.content[0], text: `${native.content[0].text}\n- ${summaryInstruction(target, selected.template)}` }] };

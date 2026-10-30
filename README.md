@@ -10,7 +10,7 @@ The plugin reads Strata's model information, previews the changes, and updates D
 
 - **Sync model settings:** context window, response output limit, and confirmed input types and reasoning levels.
 - **Align compaction budgets:** update the matching policies in enabled DSH Agent presets.
-- **Control summary length:** edit the supplemental prompt and adjust three target-length ratios.
+- **Control summary length:** edit the supplemental prompt and adjust two target-length ratios.
 - **Sync on startup:** optionally synchronize once after DSH becomes idle.
 - **Review and recover:** preview differences, back up settings, and view the last synchronization result.
 
@@ -69,7 +69,7 @@ For example, with automatic output calculation, a 32K context uses a 9,830-token
 
 ## Summary prompt and target length
 
-**Dynamic summary target** is enabled by default. It supplements DSH's native summary instructions; disabling it keeps native summary and compaction behavior.
+**Dynamic summary target** is off by default. Enable it to supplement DSH's native summary instructions. When off, DSH uses its native summary and compaction behavior.
 
 The editable **Supplemental summary prompt** starts with:
 
@@ -79,17 +79,20 @@ Keep the entire checkpoint, including all required headings, within a target of 
 
 Keep `{target}` in your text—it is replaced with the calculated token target before each supported summary. The template can contain up to 2,048 characters. Use **Restore default prompt** to reset it, then **Save preferences** to apply your choice.
 
-Expand **Calculation and limits** for the additional ratios:
+Two divisors control the target (both default to **2**, or **50%**):
 
 | Divisor | Default | Limits the target to |
 |---|---:|---|
-| Context (N) | 16 | Context ÷ N |
-| Summary output (O) | 2 | Actual summary output cap ÷ O |
+| Output budget (O) | 2 | Estimated effective summary output budget ÷ O |
 | Source length (S) | 2 | Estimated content being summarized ÷ S |
 
-The target is the smallest result, rounded down. All divisors accept decimals of at least 1. Increasing a divisor lowers its bound; another bound may still determine the final target. Context uses the smaller verified server/client window, and the source estimate excludes system prompts and tool definitions.
+The target is the smaller result, rounded down. All divisors accept decimals of at least 1. Existing output/source divisors and explicit enable choices are preserved. New or unspecified guidance remains **off**.
 
-With 32K context, a 4,096-token summary cap and enough source content, the defaults target **2,048 tokens**. This is a writing instruction, **not a hard output limit or a guarantee against truncation**. The UI previews a ceiling; the actual request may have a smaller target.
+The effective output budget is an **estimate**, not the raw requested `maxTokens` or a server-confirmed cap. It is the smaller of the request's summary cap and estimated remaining context. The latter uses the smaller verified server/client window, subtracts the full prompt (including system text, tool schemas and the supplement), and allows for the supported pi-ai adapter's 4,096-token safety reserve. Text is estimated at 3.5 characters/token with extra framing. The separate source estimate uses DSH's four-character heuristic and excludes the system prompt, tools and summary instruction. Neither estimate is an exact tokenizer count.
+
+For example, a 4,096-token effective output budget with enough source content gives a **2,048-token target** in either 32K or 64K context. A 2,000-token source instead gives a **1,000-token target**. Less remaining context can reduce the target further. The UI previews an upper bound from the proposed summary cap, before request-specific costs are known.
+
+This is a writing instruction, **not a hard output limit or a guarantee against truncation**. Reasoning may consume the same output budget; the plugin does not change reasoning, `maxTokens`, `fit_max_tokens` or compaction timing. The server's actual tokenizer, later middleware, or a different adapter version may impose a lower limit.
 
 Saving summary preferences does not change model budgets. Native prompt content is preserved, and no extra inference or retry loop is added. If the request cannot be verified or safely estimated, or the target is below 256 tokens, the original summary request proceeds unchanged.
 

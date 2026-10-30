@@ -115,9 +115,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "啟用後，在每次支援的 Strata 摘要請求前，計算長度目標，並在 DSH 原生摘要提示詞後補充一句。",
     "zh-Hans": "启用后，在每次支持的 Strata 摘要请求前，计算长度目标，并在 DSH 原生摘要提示词后补充一句。"
   },
-  "Target = floor(min(context / N, summary output limit / O, selected content estimate / S)).": {
-    "zh-Hant": "目標 = floor(min(上下文 / N, 摘要輸出上限 / O, 待壓縮內容估算 / S))。",
-    "zh-Hans": "目标 = floor(min(上下文 / N, 摘要输出上限 / O, 待压缩内容估算 / S))。"
+  "Target = floor(min(estimated effective output budget / O, selected content estimate / S)). Default divisors: 2 and 2 (50% each).": {
+    "zh-Hant": "目標 = floor(min(估算有效輸出預算 / O, 待壓縮內容估算 / S))。兩個除數預設均為 2（各取 50%）。",
+    "zh-Hans": "目标 = floor(min(估算有效输出预算 / O, 待压缩内容估算 / S))。两个除数默认均为 2（各取 50%）。"
   },
   "When guidance cannot be applied, DSH keeps its native summary behavior.": {
     "zh-Hant": "無法套用時，沿用 DSH 原生摘要。",
@@ -127,25 +127,21 @@ window.__ModuleLoader__.load({
     "zh-Hant": "啟用摘要提示補充",
     "zh-Hans": "启用摘要提示补充"
   },
-  "Enabled by default. Turning this off keeps DSH's native summary and automatic compaction behavior.": {
-    "zh-Hant": "預設開啟。關閉後保留 DSH 原生摘要與自動壓縮行為。",
-    "zh-Hans": "默认开启。关闭后保留 DSH 原生摘要与自动压缩行为。"
+  "Off by default. Enable it to supplement DSH's native summary and automatic compaction behavior.": {
+    "zh-Hant": "預設關閉。啟用後補充 DSH 原生摘要提示詞。",
+    "zh-Hans": "默认关闭。启用后补充 DSH 原生摘要提示词。"
   },
-  "Context divisor (context ÷ N)": {
-    "zh-Hant": "上下文除數（上下文 ÷ N）",
-    "zh-Hans": "上下文除数（上下文 ÷ N）"
-  },
-  "Summary output divisor (output limit ÷ O)": {
-    "zh-Hant": "摘要輸出除數（輸出上限 ÷ O）",
-    "zh-Hans": "摘要输出除数（输出上限 ÷ O）"
+  "Output budget divisor (estimated budget ÷ O)": {
+    "zh-Hant": "摘要輸出除數（估算可用預算 ÷ O）",
+    "zh-Hans": "摘要输出除数（估算可用预算 ÷ O）"
   },
   "Source length divisor (source estimate ÷ S)": {
     "zh-Hant": "原文長度除數（原文估算 ÷ S）",
     "zh-Hans": "原文长度除数（原文估算 ÷ S）"
   },
-  "Defaults: N = 16, O = 2, S = 2. Smaller divisors allow longer targets; the smallest of the three bounds wins. Decimals are supported.": {
-    "zh-Hant": "預設 N = 16、O = 2、S = 2。除數越小，目標可越長；最後取三項限制的最小值。支援小數。",
-    "zh-Hans": "默认 N = 16、O = 2、S = 2。除数越小，目标可越长；最后取三项限制的最小值。支持小数。"
+  "Defaults: O = 2, S = 2 (50% each). Smaller divisors allow longer targets; the smaller of the two bounds wins. Decimals are supported.": {
+    "zh-Hant": "預設 O = 2、S = 2（各取 50%）。除數越小，目標可越長；最後取兩項限制的較小值。支援小數。",
+    "zh-Hans": "默认 O = 2、S = 2（各取 50%）。除数越小，目标可越长；最后取两项限制的较小值。支持小数。"
   },
   "Enter a finite divisor of at least 1; decimals are allowed.": {
     "zh-Hant": "請輸入大於或等於 1 的有限除數，可使用小數。",
@@ -163,9 +159,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "儲存偏好後，這些控制項會套用至後續摘要請求；其他模型與壓縮設定保持不變。",
     "zh-Hans": "保存偏好后，这些控制项将应用于后续摘要请求；其他模型与压缩设置保持不变。"
   },
-  "Context uses the smaller of the verified Strata window and the existing DSH model window. The preview ceiling assumes the proposed budgets; existing conversation settings can make the actual target lower.": {
-    "zh-Hant": "上下文採用已確認的 Strata 視窗與 DSH 既有模型視窗的較小值。預覽上限依提議預算計算，既有對話設定可能讓實際目標更低。",
-    "zh-Hans": "上下文采用已确认的 Strata 窗口与 DSH 已有模型窗口的较小值。预览上限按提议预算计算，已有对话设置可能让实际目标更低。"
+  "The preview uses the proposed summary cap. Actual targets also account for the estimated remaining context and source length; they may be lower.": {
+    "zh-Hant": "預覽採用提議的摘要上限。實際目標還會考慮估算的上下文剩餘空間與原文長度，可能更低。",
+    "zh-Hans": "预览采用提议的摘要上限。实际目标还会考虑估算的上下文剩余空间与原文长度，可能更低。"
   },
   "The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.": {
     "zh-Hant": "保留原生提示詞、輸出硬上限與其他設定。這是寫作目標，不保證實際長度，也不代表最佳值。",
@@ -431,20 +427,20 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       };
       const diagnostic = (message) => translations[message] ? t(message) : language === 'en' ? message : t('Server diagnostic: ') + message;
       const [state,setState] = React.useState(null), [preview,setPreview] = React.useState(null), [result,setResult] = React.useState(null);
-      const [form,setForm] = React.useState({providerId:'',output:'',manual:false,auto:false,follow:true,summaryGuidance:true,summaryDivisor:'16',summaryOutputDivisor:'2',summarySourceDivisor:'2',summaryPrompt:''});
+      const [form,setForm] = React.useState({providerId:'',output:'',manual:false,auto:false,follow:true,summaryGuidance:false,summaryOutputDivisor:'2',summarySourceDivisor:'2',summaryPrompt:''});
       const [pending,setPending] = React.useState(false), [error,setError] = React.useState(''), [loadError,setLoadError] = React.useState('');
       const [notice,setNotice] = React.useState(''), [conflict,setConflict] = React.useState(false);
       const formRef=React.useRef(form), baseline=React.useRef(null), requestSeq=React.useRef(0), alive=React.useRef(true);
       const numberValue = value => value.trim()===''?NaN:Number(value);
-      const values = (f) => ({providerId:f.providerId,outputTokens:f.manual ? (f.output.trim()==='' ? NaN : Number(f.output)) : null,autoSync:f.auto,followLoadedModel:f.follow,summaryGuidance:f.summaryGuidance,summaryContextDivisor:numberValue(f.summaryDivisor),summaryOutputDivisor:numberValue(f.summaryOutputDivisor),summarySourceDivisor:numberValue(f.summarySourceDivisor),summaryPromptTemplate:f.summaryPrompt});
-      const preferences = (s) => ({providerId:s.providerId || '',outputTokens:s.outputTokens ?? null,autoSync:!!s.autoSync,followLoadedModel:s.followLoadedModel !== false,summaryGuidance:s.summaryGuidance!==false,summaryContextDivisor:s.summaryContextDivisor??16,summaryOutputDivisor:s.summaryOutputDivisor??2,summarySourceDivisor:s.summarySourceDivisor??2,summaryPromptTemplate:s.summaryPromptTemplate??s.defaultSummaryPromptTemplate??''});
+      const values = (f) => ({providerId:f.providerId,outputTokens:f.manual ? (f.output.trim()==='' ? NaN : Number(f.output)) : null,autoSync:f.auto,followLoadedModel:f.follow,summaryGuidance:f.summaryGuidance,summaryOutputDivisor:numberValue(f.summaryOutputDivisor),summarySourceDivisor:numberValue(f.summarySourceDivisor),summaryPromptTemplate:f.summaryPrompt});
+      const preferences = (s) => ({providerId:s.providerId || '',outputTokens:s.outputTokens ?? null,autoSync:!!s.autoSync,followLoadedModel:s.followLoadedModel !== false,summaryGuidance:s.summaryGuidance===true,summaryOutputDivisor:s.summaryOutputDivisor??2,summarySourceDivisor:s.summarySourceDivisor??2,summaryPromptTemplate:s.summaryPromptTemplate??s.defaultSummaryPromptTemplate??''});
       const equal = (a,b) => Object.keys(a).every(key=>Object.is(a[key],b[key]));
       const acceptStatus = React.useCallback((s,force=false) => {
         if (!alive.current) return;
         const next=preferences(s), old=baseline.current;
         const untouched=!old || equal(values(formRef.current),old.values);
         if (force || untouched) {
-          const nextForm={providerId:next.providerId,output:next.outputTokens==null?'':String(next.outputTokens),manual:next.outputTokens!=null,auto:next.autoSync,follow:next.followLoadedModel,summaryGuidance:next.summaryGuidance,summaryDivisor:String(next.summaryContextDivisor),summaryOutputDivisor:String(next.summaryOutputDivisor),summarySourceDivisor:String(next.summarySourceDivisor),summaryPrompt:next.summaryPromptTemplate};
+          const nextForm={providerId:next.providerId,output:next.outputTokens==null?'':String(next.outputTokens),manual:next.outputTokens!=null,auto:next.autoSync,follow:next.followLoadedModel,summaryGuidance:next.summaryGuidance,summaryOutputDivisor:String(next.summaryOutputDivisor),summarySourceDivisor:String(next.summarySourceDivisor),summaryPrompt:next.summaryPromptTemplate};
           formRef.current=nextForm; setForm(nextForm); setConflict(false);
           baseline.current={values:next,revision:s.settingsRevision};
         } else if (old.revision!==s.settingsRevision || !equal(old.values,next)) {
@@ -477,14 +473,14 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         } finally { if(alive.current)setPending(false); }
       }
       const draft=values(form), isDivisor=value=>Number.isFinite(value)&&value>=1&&value<=Number.MAX_SAFE_INTEGER;
-      const validDivisor=[draft.summaryContextDivisor,draft.summaryOutputDivisor,draft.summarySourceDivisor].every(isDivisor);
+      const validDivisor=[draft.summaryOutputDivisor,draft.summarySourceDivisor].every(isDivisor);
       const validPrompt=typeof draft.summaryPromptTemplate==='string'&&draft.summaryPromptTemplate.length>0&&draft.summaryPromptTemplate.length<=2048&&draft.summaryPromptTemplate.includes('{target}');
       const valid=validDivisor&&validPrompt&&(draft.outputTokens===null || Number.isSafeInteger(draft.outputTokens)&&draft.outputTokens>0);
       const dirty=!!baseline.current&&!equal(draft,baseline.current.values);
       const displayedResult=!result || state?.lastApplied?.at>result.at ? state?.lastApplied : result;
       const activeBudget=preview?.budget;
       const summaryTargetCeiling=form.summaryGuidance&&validDivisor&&Number.isSafeInteger(activeBudget?.contextWindow)&&activeBudget.contextWindow>0&&Number.isSafeInteger(activeBudget?.summaryMaxTokens)&&activeBudget.summaryMaxTokens>0
-        ? Math.floor(Math.min(activeBudget.contextWindow/draft.summaryContextDivisor,activeBudget.summaryMaxTokens/draft.summaryOutputDivisor)) : null;
+        ? Math.floor(activeBudget.summaryMaxTokens/draft.summaryOutputDivisor) : null;
       const outputSource=(budget)=>t(({server:'Strata Server default',manual:'Manual override',calculated:'Automatic calculation'})[budget?.outputSource]||'Automatic calculation');
       const preserved=(view)=>{
         const status=view?.capabilityStatus;
@@ -529,7 +525,9 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         h('div',{className:'ss-card','data-testid':'summary-target'},
           h('strong',null,t('Dynamic summary target')),
           h('label',{className:'ss-check'},h('input',{type:'checkbox','data-testid':'summary-guidance-toggle','aria-label':t('Enable summary guidance'),checked:form.summaryGuidance,onChange:e=>edit({summaryGuidance:e.target.checked}),disabled:pending||!state}),t('Enable summary guidance')),
-          h('label',null,t('Context divisor (context ÷ N)'),h('input',{type:'number','data-testid':'summary-divisor','aria-label':t('Context divisor (context ÷ N)'),'aria-invalid':!isDivisor(draft.summaryContextDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summaryDivisor,onChange:e=>edit({summaryDivisor:e.target.value}),disabled:pending||!state})),
+          h('div',{className:'ss-grid'},
+            h('label',null,t('Output budget divisor (estimated budget ÷ O)'),h('input',{type:'number','data-testid':'summary-output-divisor','aria-label':t('Output budget divisor (estimated budget ÷ O)'),'aria-invalid':!isDivisor(draft.summaryOutputDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summaryOutputDivisor,onChange:e=>edit({summaryOutputDivisor:e.target.value}),disabled:pending||!state})),
+            h('label',null,t('Source length divisor (source estimate ÷ S)'),h('input',{type:'number','data-testid':'summary-source-divisor','aria-label':t('Source length divisor (source estimate ÷ S)'),'aria-invalid':!isDivisor(draft.summarySourceDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summarySourceDivisor,onChange:e=>edit({summarySourceDivisor:e.target.value}),disabled:pending||!state}))),
           state&&!validDivisor&&h('p',{className:'ss-status ss-error',role:'alert'},t('Enter a finite divisor of at least 1; decimals are allowed.')),
           h('label',{className:'ss-prompt-label'},t('Supplemental summary prompt'),h('textarea',{'data-testid':'summary-prompt','aria-label':t('Supplemental summary prompt'),'aria-invalid':!validPrompt,rows:5,value:form.summaryPrompt,onChange:e=>edit({summaryPrompt:e.target.value}),disabled:pending||!state,spellCheck:false})),
           state&&!validPrompt&&h('p',{className:'ss-status ss-error',role:'alert'},t('Use 1–2,048 characters and include {target}.')),
@@ -540,11 +538,8 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
             ? h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens')
             : h('p',{className:'ss-status','data-testid':'summary-target-native'},t('This preview is below the 256-token minimum. The native summary prompt remains unchanged.'))),
           h('details',{className:'ss-details','data-testid':'summary-details'},h('summary',null,t('Calculation and limits')),
-            h('div',{className:'ss-grid'},
-              h('label',null,t('Summary output divisor (output limit ÷ O)'),h('input',{type:'number','data-testid':'summary-output-divisor','aria-label':t('Summary output divisor (output limit ÷ O)'),'aria-invalid':!isDivisor(draft.summaryOutputDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summaryOutputDivisor,onChange:e=>edit({summaryOutputDivisor:e.target.value}),disabled:pending||!state})),
-              h('label',null,t('Source length divisor (source estimate ÷ S)'),h('input',{type:'number','data-testid':'summary-source-divisor','aria-label':t('Source length divisor (source estimate ÷ S)'),'aria-invalid':!isDivisor(draft.summarySourceDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summarySourceDivisor,onChange:e=>edit({summarySourceDivisor:e.target.value}),disabled:pending||!state}))),
-            h('p',{className:'ss-muted'},t('Target = floor(min(context / N, summary output limit / O, selected content estimate / S)).')),
-            h('p',{className:'ss-muted'},t('When guidance cannot be applied, DSH keeps its native summary behavior.')))),
+            h('p',{className:'ss-muted'},t('Target = floor(min(estimated effective output budget / O, selected content estimate / S)). Default divisors: 2 and 2 (50% each).')),
+            h('p',{className:'ss-muted'},t('The preview uses the proposed summary cap. Actual targets also account for the estimated remaining context and source length; they may be lower.'),' ',t('When guidance cannot be applied, DSH keeps its native summary behavior.')))),
         h('div',{className:'ss-actions'},
           h('button',{disabled:pending||!state||!form.providerId||!valid||!dirty||conflict,onClick:()=>action(async()=>{
             const changes=Object.fromEntries(Object.entries(values(formRef.current)).filter(([key,value])=>!Object.is(value,baseline.current.values[key])));

@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import z from '@deepseek-ai/schemastery';
 import { discoverStrata, planBudget, StrataSyncError } from './core.mjs';
-import { DEFAULT_SUMMARY_DIVISOR, DEFAULT_SUMMARY_TEMPLATE, validSummaryDivisor, validSummaryTemplate, installSummaryGuidance } from './summary.mjs';
+import { DEFAULT_SUMMARY_TEMPLATE, validSummaryDivisor, validSummaryTemplate, installSummaryGuidance } from './summary.mjs';
 
 export const inject = ['configEditor', 'connection', 'agents', 'credentials', 'agentPresets'];
 export const Config = z.object({
@@ -11,8 +11,7 @@ export const Config = z.object({
   autoSync: z.boolean().default(false),
   followLoadedModel: z.boolean().default(true),
   outputTokens: z.number().step(1).min(1),
-  summaryGuidance: z.boolean().default(true),
-  summaryContextDivisor: z.number().min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_SUMMARY_DIVISOR),
+  summaryGuidance: z.boolean().default(false),
   summaryOutputDivisor: z.number().min(1).max(Number.MAX_SAFE_INTEGER).default(2),
   summarySourceDivisor: z.number().min(1).max(Number.MAX_SAFE_INTEGER).default(2),
   summaryPromptTemplate: z.string().default(DEFAULT_SUMMARY_TEMPLATE),
@@ -145,7 +144,7 @@ export function apply(ctx, initialConfig) {
   function publicSettings(value = settings) {
     return { providerId: value.providerId ?? '', autoSync: value.autoSync ?? false,
       followLoadedModel: value.followLoadedModel ?? true, outputTokens: value.outputTokens ?? null,
-      summaryGuidance: value.summaryGuidance ?? true, summaryContextDivisor: value.summaryContextDivisor ?? DEFAULT_SUMMARY_DIVISOR,
+      summaryGuidance: value.summaryGuidance ?? false,
       summaryOutputDivisor: value.summaryOutputDivisor ?? 2, summarySourceDivisor: value.summarySourceDivisor ?? 2,
       summaryPromptTemplate: value.summaryPromptTemplate ?? DEFAULT_SUMMARY_TEMPLATE };
   }
@@ -389,7 +388,7 @@ export function apply(ctx, initialConfig) {
   }
   async function configure(request) {
     ensureOpen();
-    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens', 'summaryGuidance', 'summaryContextDivisor', 'summaryOutputDivisor', 'summarySourceDivisor', 'summaryPromptTemplate', 'expectedRevision']);
+    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens', 'summaryGuidance', 'summaryOutputDivisor', 'summarySourceDivisor', 'summaryPromptTemplate', 'expectedRevision']);
     refreshSettings();
     if (typeof request.expectedRevision !== 'string' || request.expectedRevision !== hash(publicSettings())) {
       refuse('stale-settings', 'Sync preferences changed. Reload the latest preferences before saving.');
@@ -405,7 +404,7 @@ export function apply(ctx, initialConfig) {
       if (typeof request[key] !== 'boolean') refuse('invalid-request', `${key} must be a boolean.`);
       next[key] = request[key];
     }
-    for (const key of ['summaryContextDivisor', 'summaryOutputDivisor', 'summarySourceDivisor']) {
+    for (const key of ['summaryOutputDivisor', 'summarySourceDivisor']) {
       if (!own(request, key)) continue;
       if (!validSummaryDivisor(request[key])) refuse('invalid-budget', 'Summary divisors must be finite numbers from 1 to Number.MAX_SAFE_INTEGER.');
       next[key] = request[key];
