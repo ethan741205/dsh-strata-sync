@@ -17,6 +17,10 @@
 
 插件只读访问 Strata Server。同步不会切换或加载服务器模型、修改服务器设置，也不会发送测试推理请求。无法确认的模型能力会保留 DSH 原有值。
 
+## 0.12.10 更新内容
+
+- 摘要补充提示词字段默认缩为两行，以适配较短的默认提示词；较长的自定义文本仍可手动拉高字段。
+
 ## 0.12.9 更新内容
 
 - 默认摘要补充提示词现在只设置目标长度：`Keep the entire checkpoint, including all required headings, within a target of {target} tokens.`

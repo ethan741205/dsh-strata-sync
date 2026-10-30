@@ -17,6 +17,10 @@ The plugin reads Strata's model information, previews the changes, and updates D
 
 Strata Server is read-only to this plugin. Synchronization does not switch or load server models, change server settings, or send test inference requests. Unconfirmed model capabilities keep their existing DSH values.
 
+## What's new in 0.12.10
+
+- The supplemental summary prompt editor starts at two lines to fit the shorter default prompt, and can still be resized vertically for longer custom text.
+
 ## What's new in 0.12.9
 
 - The default summary supplement now only sets the target length: `Keep the entire checkpoint, including all required headings, within a target of {target} tokens.`

@@ -20,7 +20,7 @@ export const Config = z.object({
 });
 
 const PACKAGE = 'dsh-strata-sync';
-const PLUGIN_VERSION = '0.12.9';
+const PLUGIN_VERSION = '0.12.10';
 const COMPACTION = '@deepseek-ai/dsh-compaction-basic';
 const PRESET = '@deepseek-ai/dsh-agent-preset';
 const CHANNEL = '/api/strata-sync';

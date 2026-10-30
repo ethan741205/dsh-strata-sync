@@ -17,6 +17,10 @@
 
 外掛僅以唯讀方式存取 Strata Server。同步不會切換或載入伺服器模型、修改伺服器設定，也不會傳送測試推論請求。無法確認的模型能力會保留 DSH 原有值。
 
+## 0.12.10 更新內容
+
+- 摘要補充提示詞欄位預設縮為兩行，以配合較短的預設提示詞；較長的自訂文字仍可手動拉高欄位。
+
 ## 0.12.9 更新內容
 
 - 預設摘要補充提示詞現在只設定目標長度：`Keep the entire checkpoint, including all required headings, within a target of {target} tokens.`
