@@ -343,12 +343,16 @@ test('summary guidance follows DSH Chinese locales without changing preferences'
   assert.match(card.textContent,/附加于 DSH 原生提示词/);
   assert.equal(ui.container.querySelector('[data-testid="preview-summary-target"]'),null);
   assert.match(card.textContent,/无法应用时，沿用 DSH 原生摘要/);
+  assert.match(card.textContent,/目标也会考虑估算的上下文剩余空间与原文长度/);
+  assert.doesNotMatch(card.textContent,/The preview uses|预览采用/);
   assert.equal(card.querySelector('[data-testid="summary-details"]').querySelectorAll('p').length,2);
   await ui.changeLanguage('zh-Hant');
   assert.match(card.textContent,/動態摘要目標/);
   assert.match(card.textContent,/附加於 DSH 原生提示詞/);
   assert.equal(ui.container.querySelector('[data-testid="preview-summary-target"]'),null);
   assert.match(card.textContent,/無法套用時，沿用 DSH 原生摘要/);
+  assert.match(card.textContent,/目標也會考慮估算的上下文剩餘空間與原文長度/);
+  assert.doesNotMatch(card.textContent,/The preview uses|預覽採用/);
   assert.equal(card.querySelector('[data-testid="summary-details"]').querySelectorAll('p').length,2);
   assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
 });

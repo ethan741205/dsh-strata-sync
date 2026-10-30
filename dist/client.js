@@ -156,6 +156,10 @@ window.__ModuleLoader__.load({
     "zh-Hant": "儲存偏好後，這些控制項會套用至後續摘要請求；其他模型與壓縮設定保持不變。",
     "zh-Hans": "保存偏好后，这些控制项将应用于后续摘要请求；其他模型与压缩设置保持不变。"
   },
+  "The target also depends on the estimated remaining context and source length.": {
+    "zh-Hant": "目標也會考慮估算的上下文剩餘空間與原文長度。",
+    "zh-Hans": "目标也会考虑估算的上下文剩余空间与原文长度。"
+  },
   "The original prompt, output cap and other settings stay unchanged. This is a writing target, not a guaranteed length or an optimal value.": {
     "zh-Hant": "保留原生提示詞、輸出硬上限與其他設定。這是寫作目標，不保證實際長度，也不代表最佳值。",
     "zh-Hans": "保留原生提示词、输出硬上限与其他设置。这是写作目标，不保证实际长度，也不代表最佳值。"
@@ -611,7 +615,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
           h('p',{className:'ss-muted'},t("Appended to DSH's native prompt; {target} becomes the calculated token target. Save preferences to apply.")),
           h('details',{className:'ss-details','data-testid':'summary-details'},h('summary',null,t('Calculation and limits')),
             h('p',{className:'ss-muted'},t('Target = floor(min(estimated effective output budget / O, selected content estimate / S)). Default divisors: 2 and 2 (50% each).')),
-            h('p',{className:'ss-muted'},t('The preview uses the proposed summary cap. Actual targets also account for the estimated remaining context and source length; they may be lower.'),' ',t('When guidance cannot be applied, DSH keeps its native summary behavior.')))),
+            h('p',{className:'ss-muted'},t('The target also depends on the estimated remaining context and source length.'),' ',t('When guidance cannot be applied, DSH keeps its native summary behavior.')))),
         h('div',{className:'ss-actions'},
           h('button',{className:dirty?'primary':'',disabled:pending||!state||!form.providerId||!valid||!dirty||conflict,onClick:()=>action(async()=>{
             const changes=Object.fromEntries(Object.entries(values(formRef.current)).filter(([key,value])=>!Object.is(value,baseline.current.values[key])));

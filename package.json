@@ -1,6 +1,6 @@
 {
   "name": "dsh-strata-sync",
-  "version": "0.12.6",
+  "version": "0.12.7",
   "description": "Native DSH settings UI for synchronizing Strata Server models, context and compaction budgets",
   "type": "module",
   "main": "dist/index.js",

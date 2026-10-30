@@ -13,7 +13,7 @@ Validation date: 2026-10-31 (Asia/Taipei).
 
 ## Automated verification
 
-Version **0.12.6 passed 206 automated tests** plus package verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
+Version **0.12.7 passed 206 automated tests** plus package verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
 
 - The main preview omits the estimated summary-target card, while retaining summary output limits and all guidance controls. The aligned model-status card no longer repeats the existing-conversation policy reminder. These presentation changes leave runtime summary calculations and model/compaction settings unchanged.
 
