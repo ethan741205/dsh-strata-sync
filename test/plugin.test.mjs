@@ -12,14 +12,16 @@ const COMPACT = '@deepseek-ai/dsh-compaction-basic';
 const DEFAULT = '@deepseek-ai/dsh-agent-default-model';
 const PRESET = '@deepseek-ai/dsh-agent-preset';
 test('native config schema supplies summary defaults and validates persisted preferences', () => {
-  assert.equal(Config({}).summaryGuidance, false);
+  assert.equal(Config({}).summaryGuidance, true);
+  assert.equal(Config({}).summaryGuidanceMode, 'after-truncation');
+  assert.equal(Config({ summaryGuidanceMode: 'after-truncation' }).summaryGuidanceMode, 'after-truncation');
   assert.equal(Config({}).summaryContextDivisor, undefined);
-  assert.equal(Config({ summaryContextDivisor: 16 }).summaryGuidance, false);
+  assert.equal(Config({ summaryContextDivisor: 16 }).summaryGuidance, true);
   assert.equal(Config({}).summaryOutputDivisor, 2);
   assert.equal(Config({ summaryGuidance: false, summaryOutputDivisor: 4 }).summaryGuidance, false);
   assert.equal(Config({ summaryOutputDivisor: 1.5 }).summaryOutputDivisor, 1.5);
   assert.equal(Config({}).summarySourceDivisor, 2);
-  for (const config of [{ summaryGuidance: 'true' }, ...[0, -1, 0.5, '16', Number.MAX_SAFE_INTEGER + 1].map(summaryOutputDivisor => ({ summaryOutputDivisor }))]) {
+  for (const config of [{ summaryGuidance: 'true' }, { summaryGuidanceMode: 'on-error' }, { summaryGuidanceMode: true }, ...[0, -1, 0.5, '16', Number.MAX_SAFE_INTEGER + 1].map(summaryOutputDivisor => ({ summaryOutputDivisor }))]) {
     assert.throws(() => Config(config));
   }
 });
@@ -39,7 +41,7 @@ async function harness(options = {}) {
       { provider: 'cloud', model: 'cloud-model', maxTokens: 8192, headroomTokens: 8192 },
     ] } } },
     { options: { id: 'agent-default-model', name: DEFAULT, config: { provider: 'strata-server', model: 'qwen', keepCustom: true } } },
-    { options: { id: 'strata-sync', name: PKG, config: { providerId: 'strata-server', autoSync: !!options.autoSync, followLoadedModel: true, summaryGuidance: true } } },
+    { options: { id: 'strata-sync', name: PKG, config: { providerId: 'strata-server', autoSync: !!options.autoSync, followLoadedModel: true, summaryGuidance: true, summaryGuidanceMode: 'always' } } },
   ];
   for (const entry of entries) entry.fiber = { state: 2 };
   if (options.presets) {
@@ -221,19 +223,20 @@ test('a smaller client window still permits the full target when enough output r
   } finally { await h.close(); }
 });
 
-test('summary preferences default off, save independently, survive reload and control native requests', async () => {
+test('summary preferences default on, save independently, survive reload and control native requests', async () => {
   const h = await harness({ props: verifiedProps });
   try {
     delete h.entries[3].options.config.summaryGuidance;
+    delete h.entries[3].options.config.summaryGuidanceMode;
     h.reload();
     const initial = (await h.call('status')).value;
-    assert.equal(initial.summaryGuidance, false);
+    assert.equal(initial.summaryGuidance, true);
     const native = await summaryRequest(), beforeNative = structuredClone(native);
     for await (const _ of h.stream(native, async function* () { assert.deepEqual(native,beforeNative); yield {}; })) {}
     assert.equal(h.requests,0);
     assert.equal(initial.summaryOutputDivisor, 2);
     const others = structuredClone(h.entries.slice(0, 3));
-    const saved = await h.call('configure', { expectedRevision: initial.settingsRevision, summaryGuidance: false, summaryOutputDivisor: 4 });
+    const saved = await h.call('configure', { expectedRevision: initial.settingsRevision, summaryGuidance: false, summaryGuidanceMode: 'always', summaryOutputDivisor: 4 });
     assert.equal(saved.ok, true);
     assert.equal(saved.value.summaryGuidance, false);
     assert.equal(saved.value.summaryOutputDivisor, 4);
@@ -258,11 +261,45 @@ test('summary preferences default off, save independently, survive reload and co
   } finally { await h.close(); }
 });
 
+test('summary recovery mode saves independently, survives reload and preserves model budgets', async () => {
+  const h = await harness({ props: verifiedProps });
+  try {
+    const initial = (await h.call('status')).value;
+    assert.equal(initial.summaryGuidanceMode, 'always');
+    const others = structuredClone(h.entries.slice(0, 3));
+    const saved = await h.call('configure', { expectedRevision: initial.settingsRevision, summaryGuidanceMode: 'after-truncation' });
+    assert.equal(saved.ok, true);
+    assert.equal(saved.value.summaryGuidanceMode, 'after-truncation');
+    assert.equal(saved.value.summaryGuidance, true);
+    assert.equal(await h.backupCount(), 1);
+    assert.deepEqual(h.entries.slice(0, 3), others);
+    h.reload();
+    const current = (await h.call('status')).value;
+    assert.equal(current.summaryGuidanceMode, 'after-truncation');
+    const options = await summaryRequest(), original = structuredClone(options);
+    for await (const _ of h.stream(options, async function* () {
+      assert.deepEqual(options, original);
+      yield { type: 'finish', reason: { kind: 'max-tokens' } };
+    })) {}
+    assert.equal(h.requests, 0);
+    for await (const _ of h.stream(options, async function* () {
+      assert.match(options.messages.at(-1).content[0].text, /target of 2048 tokens/);
+      yield { type: 'finish', reason: { kind: 'stop' } };
+    })) {}
+    assert.deepEqual(options, original);
+    assert.equal(h.writes, 1);
+    const stale = await h.call('configure', { expectedRevision: initial.settingsRevision, summaryGuidanceMode: 'always' });
+    assert.equal(stale.error.code, 'stale-settings');
+    assert.deepEqual(h.entries.slice(0, 3), others);
+  } finally { await h.close(); }
+});
+
 test('summary preference validation rejects invalid values before backup and revision protects concurrent edits', async () => {
   const h = await harness();
   try {
     const initial = (await h.call('status')).value;
     for (const patch of [{ summaryGuidance: null }, { summaryGuidance: 1 },
+      ...[null, '', 'on-error', true, 1].map(summaryGuidanceMode => ({ summaryGuidanceMode })),
       ...['summaryOutputDivisor', 'summarySourceDivisor'].flatMap(key => [null, 0, -1, 0.5, '16', Number.MAX_SAFE_INTEGER + 1].map(value => ({ [key]: value }))),
       ...[null, '', 'No placeholder', '{target}' + 'a'.repeat(2048)].map(summaryPromptTemplate => ({ summaryPromptTemplate }))]) {
       const result = await h.call('configure', { expectedRevision: initial.settingsRevision, ...patch });
@@ -278,7 +315,7 @@ test('summary preference validation rejects invalid values before backup and rev
 });
 
 test('summary preference changes during discovery keep the original request', async () => {
-  for (const patch of [{ summaryGuidance: false }, { summaryOutputDivisor: 4 }, { summaryOutputDivisor: 1.5 }, { summarySourceDivisor: 3.5 }, { summaryPromptTemplate: 'Summarize in {target} tokens.' }]) {
+  for (const patch of [{ summaryGuidance: false }, { summaryGuidanceMode: 'after-truncation' }, { summaryOutputDivisor: 4 }, { summaryOutputDivisor: 1.5 }, { summarySourceDivisor: 3.5 }, { summaryPromptTemplate: 'Summarize in {target} tokens.' }]) {
     let h;
     h = await harness({ props: verifiedProps, beforeFetch: async url => {
       if (url.endsWith('/models')) Object.assign(h.entries[3].options.config, patch);

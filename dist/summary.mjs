@@ -9,6 +9,9 @@ export const DEFAULT_SUMMARY_TEMPLATE = `${GUIDANCE_PREFIX}{target} tokens by re
 export const validSummaryTemplate = value => typeof value === 'string' && value.length <= 2048 && value.includes('{target}');
 // Share identity across hot reloads/copies without adding fields to native requests.
 const augmentedMessages = globalThis[Symbol.for('dsh-strata-sync/summary-augmented')] ??= new WeakSet();
+// Duplicate plugin hooks must not independently observe the same native call.
+const observedRequests = globalThis[Symbol.for('dsh-strata-sync/summary-observed')] ??= new WeakSet();
+export const MAX_RECOVERY_SESSIONS = 128;
 // Eight mandatory headings need enough space for a meaningful checkpoint. Do
 // not round a tiny target UP; leave native behavior intact instead.
 export const MIN_SUMMARY_TARGET = 256;
@@ -113,49 +116,123 @@ export function estimateEffectiveSummaryBudget(options, contextWindow, template 
  */
 export function installSummaryGuidance(ctx, resolveContext, getSettings = () => ({})) {
   let closed = false;
+  // Only routing identifiers and booleans are retained, never prompts or output.
+  // A newer attempt owns settlement, so a late older failure cannot re-arm a
+  // session whose newer summary succeeded. Eviction safely returns to native.
+  const recovery = new Map();
+  const commits = new Map();
+  let attempt = 0;
+  function recoveryKey(options) {
+    const parts = [options.sessionId, options.provider, options.model];
+    return parts.every(value => typeof value === 'string' && value.length > 0 && value.length <= 512)
+      ? JSON.stringify(parts) : null;
+  }
+  function beginRecovery(key) {
+    const state = recovery.get(key) ?? { armed: false, latest: 0 };
+    state.latest = ++attempt;
+    recovery.delete(key);
+    recovery.set(key, state);
+    while (recovery.size > MAX_RECOVERY_SESSIONS) recovery.delete(recovery.keys().next().value);
+    return { state, ticket: state.latest };
+  }
   function preferences() {
     try {
       const value = getSettings();
-      const enabled = value.summaryGuidance === undefined ? false : value.summaryGuidance;
+      const enabled = value.summaryGuidance === undefined ? true : value.summaryGuidance;
+      const mode = value.summaryGuidanceMode === undefined ? 'after-truncation' : value.summaryGuidanceMode;
       const outputDivisor = value.summaryOutputDivisor === undefined ? 2 : value.summaryOutputDivisor;
       const sourceDivisor = value.summarySourceDivisor === undefined ? 2 : value.summarySourceDivisor;
       const template = value.summaryPromptTemplate === undefined ? DEFAULT_SUMMARY_TEMPLATE : value.summaryPromptTemplate;
-      return enabled === true && [outputDivisor, sourceDivisor].every(validSummaryDivisor) && validSummaryTemplate(template)
-        ? { outputDivisor, sourceDivisor, template } : null;
-    } catch { return null; }
+      const valid = enabled === true && ['always', 'after-truncation'].includes(mode)
+        && [outputDivisor, sourceDivisor].every(validSummaryDivisor) && validSummaryTemplate(template);
+      if (!valid || mode !== 'after-truncation') { recovery.clear(); commits.clear(); }
+      return valid ? { mode, outputDivisor, sourceDivisor, template } : null;
+    } catch { recovery.clear(); commits.clear(); return null; }
   }
+  // A stopped stream can still fail native checkpoint validation. DSH records
+  // compaction/summary only after that validation, then commits its checkpoint
+  // before compaction/end. Reset only after that matching, error-free pair.
+  const removeCommit = ctx.on('session/event', (session, event) => {
+    if (closed || preferences()?.mode !== 'after-truncation') return;
+    const data = event?.data;
+    if (typeof session?.id !== 'string' || !session.id || session.id.length > 512
+        || typeof data?.compactionId !== 'string' || !data.compactionId || data.compactionId.length > 512) return;
+    const id = JSON.stringify([session.id, data.compactionId]);
+    if (event.type === 'compaction/summary') {
+      const scope = recoveryKey({ sessionId: session.id, provider: data.provider, model: data.model });
+      const state = scope === null ? null : recovery.get(scope);
+      if (!state?.armed || state.lastCompletedTicket !== state.latest) return;
+      commits.delete(id);
+      commits.set(id, { scope, state, ticket: state.latest });
+      while (commits.size > MAX_RECOVERY_SESSIONS) commits.delete(commits.keys().next().value);
+    } else if (event.type === 'compaction/end') {
+      const commit = commits.get(id);
+      commits.delete(id);
+      if (data.error === undefined && commit && recovery.get(commit.scope) === commit.state
+          && commit.state.latest === commit.ticket && commit.state.lastCompletedTicket === commit.ticket) recovery.delete(commit.scope);
+    }
+  });
   const remove = ctx.on('llm/stream', (options, next) => {
+    // Reading the current master switch also clears pending recovery when the
+    // next request is an ordinary agent call after guidance was disabled.
+    const selected = preferences();
     const native = nativeSummaryMessage(options);
     const descriptor = options && Object.getOwnPropertyDescriptor(options, 'messages');
-    if (closed || !native || !descriptor?.writable || options.signal?.aborted) return next();
+    if (closed || !native || !descriptor?.writable || options.signal?.aborted || observedRequests.has(options)) return next();
     // Disabled guidance must not perform even metadata discovery. Native DSH
     // compaction and its request options still pass through unchanged.
-    const selected = preferences();
     if (!selected) return next();
+    const key = selected.mode === 'after-truncation' ? recoveryKey(options) : null;
+    if (selected.mode === 'after-truncation' && key === null) return next();
     const sourceTokens = estimateSummarySource(options.messages);
     if (!positive(sourceTokens) || !positive(options.maxTokens)) return next();
     return (async function* () {
       const original = options.messages;
+      const observation = key === null ? null : beginRecovery(key);
       let augmented;
+      observedRequests.add(options);
       try {
-        let contextWindow;
-        try { contextWindow = await resolveContext(options); }
-        catch { /* Metadata/compatibility failure must not break native inference. */ }
-        const effectiveOutput = estimateEffectiveSummaryBudget(options, contextWindow, selected.template);
-        const target = planSummaryTarget(effectiveOutput, sourceTokens, selected.outputDivisor, selected.sourceDivisor);
-        const current = preferences();
-        if (!closed && !options.signal?.aborted && current && Object.keys(selected).every(key => selected[key] === current[key]) && target !== null && options.messages === original) {
-          const last = { ...native, content: [{ ...native.content[0], text: `${native.content[0].text}\n- ${summaryInstruction(target, selected.template)}` }] };
-          augmented = [...original.slice(0, -1), last];
-          augmentedMessages.add(augmented);
-          options.messages = augmented;
+        if (selected.mode === 'always' || observation.state.armed) {
+          let contextWindow;
+          try { contextWindow = await resolveContext(options); }
+          catch { /* Metadata/compatibility failure must not break native inference. */ }
+          const effectiveOutput = estimateEffectiveSummaryBudget(options, contextWindow, selected.template);
+          const target = planSummaryTarget(effectiveOutput, sourceTokens, selected.outputDivisor, selected.sourceDivisor);
+          const current = preferences();
+          if (!closed && !options.signal?.aborted && current && Object.keys(selected).every(key => selected[key] === current[key]) && target !== null && options.messages === original) {
+            const last = { ...native, content: [{ ...native.content[0], text: `${native.content[0].text}\n- ${summaryInstruction(target, selected.template)}` }] };
+            augmented = [...original.slice(0, -1), last];
+            augmentedMessages.add(augmented);
+            options.messages = augmented;
+          }
         }
-        yield* next();
+        let finish;
+        // Native DSH uses finish.reason.kind = max-tokens for truncation.
+        // Forward all chunks unchanged and call next exactly once. Cordis's
+        // next consumes the waterfall and cannot be used to replay a retry.
+        for await (const chunk of next()) {
+          if (chunk?.type === 'finish') finish = chunk.reason?.kind;
+          yield chunk;
+        }
+        const current = preferences();
+        if (observation && !closed && !options.signal?.aborted && current?.mode === 'after-truncation'
+            && recovery.get(key) === observation.state && observation.state.latest === observation.ticket) {
+          if (finish === 'max-tokens') {
+            observation.state.armed = true;
+            delete observation.state.lastCompletedTicket;
+          } else if (finish === 'stop' || finish === 'tool-calls') {
+            // Native finishError accepts both. The later summary/end pair,
+            // not this finish reason alone, proves the checkpoint committed.
+            observation.state.lastCompletedTicket = observation.ticket;
+          }
+        }
       } finally {
+        if (observation && recovery.get(key) === observation.state && observation.state.latest === observation.ticket && !observation.state.armed) recovery.delete(key);
+        observedRequests.delete(options);
         if (augmented) augmentedMessages.delete(augmented);
         if (augmented && options.messages === augmented) options.messages = original;
       }
     })();
   });
-  ctx.effect(() => () => { closed = true; remove?.(); }, 'strata-sync: summary guidance lifetime');
+  ctx.effect(() => () => { closed = true; recovery.clear(); commits.clear(); remove?.(); removeCommit?.(); }, 'strata-sync: summary guidance lifetime');
 }

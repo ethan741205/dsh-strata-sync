@@ -17,6 +17,15 @@ The plugin reads Strata's model information, previews the changes, and updates D
 
 Strata Server is read-only to this plugin. Synchronization does not switch or load server models, change server settings, or send test inference requests. Unconfirmed model capabilities keep their existing DSH values.
 
+## What's new in 0.12.4
+
+- Summary guidance is enabled for new or unspecified configurations, using **After summary truncation**. Explicitly disabled configurations stay disabled.
+- The first summary uses DSH's native instructions. After an output-token truncation, guidance applies to subsequent native compaction attempts in the same conversation, provider and model; a successfully committed summary restores native instructions.
+- The mode selector lists **After summary truncation** before **Every summary**, with matching English, Simplified Chinese and Traditional Chinese labels and help.
+- No extra inference requests or retry loop are added. Existing model limits, target-length divisors and custom prompts are preserved.
+
+Validation: **209 automated tests** passed, with source/build consistency and package contents verified. This release was not validated with a live model inference run.
+
 ## Get started
 
 ### 1. Prepare the connection
@@ -84,7 +93,16 @@ For example, with automatic output calculation, a 32K context uses a 9,830-token
 
 ## Summary prompt and target length
 
-**Dynamic summary target** is off by default. Enable it to supplement DSH's native summary instructions. When off, DSH uses its native summary and compaction behavior.
+**Dynamic summary target** is on by default, using **After summary truncation**. You can disable it or choose when to supplement DSH's native summary instructions:
+
+| Mode | Behavior |
+|---|---|
+| **After summary truncation** (`after-truncation`, the default mode) | Start with the native instruction. If a summary hits its output-token limit, add length guidance to the next native compaction for the same conversation, provider and model. Keep guidance active through unsuccessful attempts; after successful compaction, return to the native instruction. |
+| **Every summary** (`always`) | Add the length instruction to every supported summary, including the first attempt. |
+
+The mode is saved as `summaryGuidanceMode`; `summaryGuidance` remains the enable switch. When disabled, DSH uses its native summary and compaction behavior. Choosing a mode does not enable guidance by itself.
+
+**After summary truncation** waits for DSH's next compaction attempt; it does not immediately retry or send another model request. Cancellation, network/authentication errors and context-overflow errors do not activate it. Recovery state is kept only in memory and clears when guidance is disabled, the mode changes, or the plugin reloads or restarts. Conversations do not share recovery state.
 
 The editable **Supplemental summary prompt** starts with:
 
@@ -92,7 +110,7 @@ The editable **Supplemental summary prompt** starts with:
 Keep the entire checkpoint, including all required headings, within a target of {target} tokens by retaining only information essential to continue the remaining work, consolidating prior summaries, and removing redundant or obsolete details.
 ```
 
-Keep `{target}` in your text—it is replaced with the calculated token target before each supported summary. The template can contain up to 2,048 characters. Use **Restore default prompt** to reset it, then **Save preferences** to apply your choice.
+Keep `{target}` in your text—it is replaced with the calculated token target whenever guidance applies. The template can contain up to 2,048 characters. Use **Restore default prompt** to reset it, then **Save preferences** to apply your choice.
 
 Two divisors control the target (both default to **2**, or **50%**):
 
@@ -101,7 +119,7 @@ Two divisors control the target (both default to **2**, or **50%**):
 | Output budget (O) | 2 | Estimated effective summary output budget ÷ O |
 | Source length (S) | 2 | Estimated content being summarized ÷ S |
 
-The target is the smaller result, rounded down. All divisors accept decimals of at least 1. Existing output/source divisors and explicit enable choices are preserved. New or unspecified guidance remains **off**.
+The target is the smaller result, rounded down. All divisors accept decimals of at least 1. Existing output/source divisors and explicit enable choices are preserved. New or unspecified guidance is **on**, using **After summary truncation**; explicitly disabled configurations stay disabled.
 
 The effective output budget is an **estimate**, not the raw requested `maxTokens` or a server-confirmed cap. It is the smaller of the request's summary cap and estimated remaining context. The latter uses the smaller verified server/client window, subtracts the full prompt (including system text, tool schemas and the supplement), and allows for the supported pi-ai adapter's 4,096-token safety reserve. Text is estimated at 3.5 characters/token with extra framing. The separate source estimate uses DSH's four-character heuristic and excludes the system prompt, tools and summary instruction. Neither estimate is an exact tokenizer count.
 

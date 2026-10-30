@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { Context, Service } from '@deepseek-ai/cordis';
 import { clampMaxTokensToContext } from '@earendil-works/pi-ai/api/simple-options';
-import { estimateEffectiveSummaryBudget, estimateSummarySource, installSummaryGuidance, MIN_SUMMARY_TARGET,
+import { estimateEffectiveSummaryBudget, estimateSummarySource, installSummaryGuidance, MIN_SUMMARY_TARGET, MAX_RECOVERY_SESSIONS,
   nativeSummaryMessage, planSummaryTarget, summaryInstruction } from '../src/summary.mjs';
 
 // Public native instruction from @deepseek-ai/dsh-compaction-basic 0.2.1-rc.3
@@ -38,7 +38,7 @@ const fixture = (changes = {}) => ({
 async function installed(t, resolveContext = async () => 32768, getSettings = () => ({summaryGuidance:true})) {
   const ctx = new Context();
   const llm = new Service(ctx, 'llm');
-  const fiber = ctx.plugin(child => installSummaryGuidance(child, resolveContext, getSettings));
+  const fiber = ctx.plugin(child => installSummaryGuidance(child, resolveContext, () => { const value = getSettings(); return value == null ? value : { summaryGuidanceMode: 'always', ...value }; }));
   await fiber.await();
   assert.equal(fiber.state, 2);
   t.after(() => fiber.dispose());
@@ -134,7 +134,7 @@ test('full prompt costs and tool schemas reduce remaining output room, but not t
   }
 });
 
-test('legacy context divisor is ignored; default-disabled guidance still does no discovery', async t => {
+test('legacy context divisor is ignored; explicitly disabled guidance still does no discovery', async t => {
   for (const legacy of [1, 16, 32, 1000, null]) {
     const harness = await installed(t, async () => 32768, () => ({ summaryGuidance: true, summaryContextDivisor: legacy }));
     const options = fixture();
@@ -143,7 +143,7 @@ test('legacy context divisor is ignored; default-disabled guidance still does no
     }));
   }
   let calls = 0;
-  const disabled = await installed(t, async () => { calls++; return 32768; }, () => ({ summaryContextDivisor: 16 }));
+  const disabled = await installed(t, async () => { calls++; return 32768; }, () => ({ summaryGuidance: false, summaryContextDivisor: 16 }));
   const options = fixture(), original = options.messages;
   await collect(disabled.stream(options, async function* (request) {
     assert.strictEqual(request.messages, original); yield {};
@@ -189,7 +189,7 @@ test('custom guidance is appended only once across duplicate hooks and restored 
 });
 
 test('disabled, invalid or unavailable preferences preserve native compaction without metadata', async t => {
-  for (const setting of [{}, { summaryGuidance: false }, { summaryGuidance: 'true' },
+  for (const setting of [{ summaryGuidance: false }, { summaryGuidance: 'true' },
     { summaryGuidance: true, summaryOutputDivisor: 0 }, { summaryGuidance: true, summarySourceDivisor: null },
     { summaryOutputDivisor: 0.5 }, { summarySourceDivisor: Infinity }, { summaryPromptTemplate: 'Missing placeholder' }, null]) {
     let discovery = 0, calls = 0;
@@ -491,4 +491,285 @@ test('another middleware replacement is not overwritten after metadata or stream
   gate.resolve(32768);
   await task;
   assert.strictEqual(options.messages, replacement);
+});
+
+const recoverySettings = () => ({ summaryGuidance: true, summaryGuidanceMode: 'after-truncation' });
+
+test('omitted mode starts with native summary and enables guidance only after truncation', async t => {
+  let discoveries = 0;
+  const h = await installed(t, async () => { discoveries++; return 32768; }, () => ({ summaryGuidance: undefined, summaryGuidanceMode: undefined }));
+  const first = fixture(), original = first.messages.at(-1).content[0].text;
+  await collect(h.stream(first, async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, original);
+    yield { type: 'finish', reason: { kind: 'max-tokens' } };
+  }));
+  assert.equal(discoveries, 0);
+  const next = fixture();
+  await collect(h.stream(next, async function* (options) {
+    assert.match(options.messages.at(-1).content[0].text, /target of 2048 tokens/);
+    yield { type: 'finish', reason: { kind: 'stop' } };
+  }));
+  assert.equal(discoveries, 1);
+});
+const finished = kind => ({ type: 'finish', reason: { kind } });
+const compactionEvent = (harness, type, data = {}, sessionId = 'test-session') => harness.ctx.emit('session/event',
+  { id: sessionId }, { type, data: { compactionId: 'native-compaction', ...data } });
+function committed(harness, changes = {}) {
+  const { sessionId = 'test-session', provider = 'strata-server', model = 'qwen', compactionId = 'native-compaction' } = changes;
+  compactionEvent(harness, 'compaction/summary', { compactionId, provider, model }, sessionId);
+  compactionEvent(harness, 'compaction/end', { compactionId }, sessionId);
+}
+
+test('after-truncation leaves the first summary native, guides subsequent attempts, and resets on success', async t => {
+  let discoveries = 0, dispatches = 0, downstreamVisits = 0;
+  const harness = await installed(t, async () => { discoveries++; return 32768; }, recoverySettings);
+  const downstream = harness.ctx.plugin(child => child.on('llm/stream', (_options, next) => {
+    downstreamVisits++; return next();
+  }));
+  await downstream.await(); t.after(() => downstream.dispose());
+  for (const [kind, guided] of [['stop', false], ['max-tokens', false], ['max-tokens', true], ['stop', true], ['stop', false]]) {
+    const options = fixture(), originals = { ...options };
+    const events = [ { type: 'text-delta', text: kind === 'stop' ? 'Completed native summary' : 'Partial native summary' }, finished(kind) ];
+    assert.deepEqual(await collect(harness.stream(options, async function* (request) {
+      dispatches++;
+      assert.equal(request.messages.at(-1).content[0].text, guided ? nativePrompt + '\n- ' + summaryInstruction(2048) : nativePrompt);
+      for (const [key, value] of Object.entries(originals)) if (key !== 'messages') assert.strictEqual(request[key], value, key);
+      yield* events;
+    })), events);
+    assert.strictEqual(options.messages, originals.messages);
+    if (kind === 'stop') committed(harness);
+  }
+  assert.equal(dispatches, 5, 'each native attempt dispatches once, including truncated attempts');
+  assert.equal(downstreamVisits, 5, 'the downstream waterfall is preserved on every attempt');
+  assert.equal(discoveries, 2, 'only the two armed attempts need metadata');
+});
+
+test('recovery is isolated by session, provider and model, and ordinary calls never consume it', async t => {
+  const harness = await installed(t, async () => 32768, recoverySettings);
+  await collect(harness.stream(fixture(), async function* () { yield finished('max-tokens'); }));
+  for (const changes of [{ sessionId: 'different-session' }, { provider: 'different-provider' }, { model: 'different-model' }, { purpose: 'agent' }]) {
+    await collect(harness.stream(fixture(changes), async function* (request) {
+      assert.equal(request.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+    }));
+  }
+  await collect(harness.stream(fixture(), async function* (request) {
+    assert.match(request.messages.at(-1).content[0].text, /target of 2048 tokens/); yield finished('stop');
+  }));
+});
+
+test('only the native structured max-tokens finish arms recovery', async t => {
+  for (const result of [finished('error'), finished('aborted'), finished('context-window-exceeded'),
+    { type: 'finish', reason: { kind: 'error', failure: { message: 'output token limit' } } },
+    { type: 'done', reason: { kind: 'max-tokens' } }, { type: 'finish', finishReason: 'length' },
+    { type: 'text-delta', text: 'max-tokens' }, null, Error('max-tokens from a transport failure')]) {
+    let discoveries = 0;
+    const harness = await installed(t, async () => { discoveries++; return 32768; }, recoverySettings);
+    const request = collect(harness.stream(fixture(), async function* () {
+      if (result instanceof Error) throw result;
+      if (result) yield result;
+    }));
+    if (result instanceof Error) await assert.rejects(request, e => e === result);
+    else await request;
+    await collect(harness.stream(fixture(), async function* (options) {
+      assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+    }));
+    assert.equal(discoveries, 0);
+  }
+});
+
+test('missing routing identity and invalid mode leave all attempts native', async t => {
+  for (const changes of [{ sessionId: undefined }, { sessionId: '' }, { sessionId: 'x'.repeat(513) }, { provider: '' }, { model: undefined }]) {
+    let discoveries = 0;
+    const harness = await installed(t, async () => { discoveries++; return 32768; }, recoverySettings);
+    for (let i = 0; i < 2; i++) await collect(harness.stream(fixture(changes), async function* (options) {
+      assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('max-tokens');
+    }));
+    assert.equal(discoveries, 0);
+  }
+  const harness = await installed(t, async () => { throw Error('must not discover'); }, () => ({ summaryGuidance: true, summaryGuidanceMode: 'unknown' }));
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('max-tokens');
+  }));
+});
+
+test('disabling guidance or selecting always clears pending recovery', async t => {
+  for (const change of [{ summaryGuidance: false, summaryGuidanceMode: 'after-truncation' }, { summaryGuidance: true, summaryGuidanceMode: 'always' }]) {
+    let settings = recoverySettings();
+    const harness = await installed(t, async () => 32768, () => settings);
+    await collect(harness.stream(fixture(), async function* () { yield finished('max-tokens'); }));
+    settings = change;
+    await collect(harness.stream(fixture({ purpose: 'agent' }), async function* () { yield finished('stop'); }));
+    settings = recoverySettings();
+    await collect(harness.stream(fixture(), async function* (options) {
+      assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+    }));
+  }
+});
+
+test('aborted and incompletely consumed streams cannot arm recovery', async t => {
+  for (const abort of [false, true]) {
+    let discoveries = 0;
+    const harness = await installed(t, async () => { discoveries++; return 32768; }, recoverySettings);
+    const controller = new AbortController();
+    const iterator = harness.stream(fixture({ signal: controller.signal }), async function* () {
+      yield finished('max-tokens');
+    })[Symbol.asyncIterator]();
+    assert.deepEqual((await iterator.next()).value, finished('max-tokens'));
+    if (abort) { controller.abort(); await iterator.next(); }
+    else await iterator.return();
+    await collect(harness.stream(fixture(), async function* (options) {
+      assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+    }));
+    assert.equal(discoveries, 0);
+  }
+});
+
+test('a failed guided attempt retains recovery and unknown metadata falls back safely', async t => {
+  let metadataAvailable = true;
+  const harness = await installed(t, async () => metadataAvailable ? 32768 : null, recoverySettings);
+  await collect(harness.stream(fixture(), async function* () { yield finished('max-tokens'); }));
+  const failure = Error('connection lost');
+  await assert.rejects(collect(harness.stream(fixture(), async function* (options) {
+    assert.match(options.messages.at(-1).content[0].text, /target of 2048 tokens/); throw failure;
+  })), e => e === failure);
+  metadataAvailable = false;
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('max-tokens');
+  }));
+  metadataAvailable = true;
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.match(options.messages.at(-1).content[0].text, /target of 2048 tokens/); yield finished('stop');
+  }));
+});
+
+test('late older failures cannot overwrite a newer successful summary', async t => {
+  const gate = deferred(), entered = deferred();
+  let discoveries = 0;
+  const harness = await installed(t, async () => { discoveries++; return 32768; }, recoverySettings);
+  const earlier = collect(harness.stream(fixture(), async function* () {
+    entered.resolve(); await gate.promise; yield finished('max-tokens');
+  }));
+  await entered.promise;
+  await collect(harness.stream(fixture(), async function* () { yield finished('stop'); }));
+  gate.resolve(); await earlier;
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+  }));
+  assert.equal(discoveries, 0);
+});
+
+test('recovery memory is bounded and an evicted session safely returns to native behavior', async t => {
+  const harness = await installed(t, async () => 32768, recoverySettings);
+  for (let i = 0; i <= MAX_RECOVERY_SESSIONS; i++) {
+    await collect(harness.stream(fixture({ sessionId: `session-${i}` }), async function* () { yield finished('max-tokens'); }));
+  }
+  await collect(harness.stream(fixture({ sessionId: 'session-0' }), async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+  }));
+  await collect(harness.stream(fixture({ sessionId: `session-${MAX_RECOVERY_SESSIONS}` }), async function* (options) {
+    assert.match(options.messages.at(-1).content[0].text, /target of 2048 tokens/); yield finished('stop');
+  }));
+});
+
+test('duplicate recovery hooks observe once, preserve downstream middleware, and do not dispatch retries', async t => {
+  let discoveries = 0, dispatches = 0, visits = 0;
+  const resolve = async () => { discoveries++; return 32768; };
+  const harness = await installed(t, resolve, recoverySettings);
+  const second = harness.ctx.plugin(child => installSummaryGuidance(child, resolve, recoverySettings));
+  const downstream = harness.ctx.plugin(child => child.on('llm/stream', (_options, next) => { visits++; return next(); }));
+  await Promise.all([second.await(), downstream.await()]);
+  t.after(() => second.dispose()); t.after(() => downstream.dispose());
+  for (const [kind, guided] of [['max-tokens', false], ['stop', true], ['stop', false]]) {
+    await collect(harness.stream(fixture(), async function* (options) {
+      dispatches++;
+      assert.equal(options.messages.at(-1).content[0].text, guided ? nativePrompt + '\n- ' + summaryInstruction(2048) : nativePrompt);
+      yield finished(kind);
+    }));
+    if (kind === 'stop') committed(harness);
+  }
+  assert.equal(discoveries, 1); assert.equal(dispatches, 3); assert.equal(visits, 3);
+});
+
+test('unloading removes pending recovery before a fresh plugin instance observes the session', async t => {
+  const harness = await installed(t, async () => 32768, recoverySettings);
+  await collect(harness.stream(fixture(), async function* () { yield finished('max-tokens'); }));
+  await harness.fiber.dispose();
+  const replacement = harness.ctx.plugin(child => installSummaryGuidance(child, async () => { throw Error('must not discover'); }, recoverySettings));
+  await replacement.await(); t.after(() => replacement.dispose());
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+  }));
+});
+
+test('stop does not clear recovery when native checkpoint validation or commit fails', async t => {
+  const harness = await installed(t, async () => 32768, recoverySettings);
+  await collect(harness.stream(fixture(), async function* () { yield finished('max-tokens'); }));
+  const guided = async () => collect(harness.stream(fixture(), async function* (options) {
+    assert.match(options.messages.at(-1).content[0].text, /target of 2048 tokens/); yield finished('stop');
+  }));
+  await guided();
+  compactionEvent(harness, 'compaction/end', { error: 'summary is not smaller than the shadowed content' });
+  await guided();
+  // An unmatched successful end is not proof of a committed summary.
+  compactionEvent(harness, 'compaction/end');
+  await guided();
+  committed(harness, { provider: 'different-provider' });
+  committed(harness, { model: 'different-model' });
+  committed(harness, { sessionId: 'different-session' });
+  await guided();
+  compactionEvent(harness, 'compaction/summary', { provider: 'strata-server', model: 'qwen' });
+  compactionEvent(harness, 'compaction/end', { error: 'checkpoint commit failed' });
+  await guided();
+  committed(harness);
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+  }));
+});
+
+test('a matching native summary must precede its own successful compaction end', async t => {
+  const harness = await installed(t, async () => 32768, recoverySettings);
+  await collect(harness.stream(fixture(), async function* () { yield finished('max-tokens'); }));
+  await collect(harness.stream(fixture(), async function* () { yield finished('stop'); }));
+  compactionEvent(harness, 'compaction/summary', { compactionId: 'one', provider: 'strata-server', model: 'qwen' });
+  compactionEvent(harness, 'compaction/end', { compactionId: 'two' });
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.match(options.messages.at(-1).content[0].text, /target of 2048 tokens/); yield finished('stop');
+  }));
+  committed(harness, { compactionId: 'three' });
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+  }));
+});
+
+test('a native tool-calls finish with valid summary text resets only after checkpoint commit', async t => {
+  const harness = await installed(t, async () => 32768, recoverySettings);
+  await collect(harness.stream(fixture(), async function* () { yield finished('max-tokens'); }));
+  const nativeSummary = async function* (options) {
+    assert.match(options.messages.at(-1).content[0].text, /target of 2048 tokens/);
+    yield { type: 'text-delta', text: 'A complete checkpoint accepted by native validation.' };
+    yield finished('tool-calls');
+  };
+  await collect(harness.stream(fixture(), nativeSummary));
+  // The finish itself is insufficient: a following native attempt is still guided.
+  await collect(harness.stream(fixture(), nativeSummary));
+  committed(harness);
+  await collect(harness.stream(fixture(), async function* (options) {
+    assert.equal(options.messages.at(-1).content[0].text, nativePrompt); yield finished('stop');
+  }));
+});
+
+test('an old commit cannot clear a newer truncation, even when its summary event arrives late', async t => {
+  for (const lateSummary of [false, true]) {
+    const harness = await installed(t, async () => 32768, recoverySettings);
+    await collect(harness.stream(fixture(), async function* () { yield finished('max-tokens'); }));
+    await collect(harness.stream(fixture(), async function* () { yield finished('stop'); }));
+    const summary = () => compactionEvent(harness, 'compaction/summary', { provider: 'strata-server', model: 'qwen' });
+    if (!lateSummary) summary();
+    await collect(harness.stream(fixture(), async function* () { yield finished('max-tokens'); }));
+    if (lateSummary) summary();
+    compactionEvent(harness, 'compaction/end');
+    await collect(harness.stream(fixture(), async function* (options) {
+      assert.match(options.messages.at(-1).content[0].text, /target of 2048 tokens/); yield finished('stop');
+    }));
+  }
 });

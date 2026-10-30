@@ -87,6 +87,12 @@ window.__ModuleLoader__.load({
     "zh-Hant": "動態摘要目標",
     "zh-Hans": "动态摘要目标"
   },
+  "When to use guidance": {"zh-Hant":"何時使用長度指引","zh-Hans":"何时使用长度指引"},
+  "Every summary": {"zh-Hant":"每次摘要","zh-Hans":"每次摘要"},
+  "After summary truncation": {"zh-Hant":"摘要截斷後","zh-Hans":"摘要截断后"},
+  "The first summary uses native instructions. If it hits the output limit, subsequent native summaries in the same conversation use guidance until a compaction succeeds. No extra retry is started.": {"zh-Hant":"首次使用原生摘要指令。若達到輸出上限，同一對話後續的原生摘要嘗試會加入長度指引，成功後恢復原生方式。不會額外啟動重試。","zh-Hans":"首次使用原生摘要指令。若达到输出上限，同一对话后续的原生摘要尝试会加入长度指引，成功后恢复原生方式。不会额外启动重试。"},
+  "Guidance is added to every supported summary, including the first attempt.": {"zh-Hant":"每次支援的摘要都加入長度指引，包括首次嘗試。","zh-Hans":"每次支持的摘要都加入长度指引，包括首次尝试。"},
+  "This target applies only during recovery after a truncated summary.": {"zh-Hant":"此目標只在摘要截斷後的恢復階段使用。","zh-Hans":"此目标只在摘要截断后的恢复阶段使用。"},
   "Supplemental summary prompt": {
     "zh-Hant": "摘要補充提示詞",
     "zh-Hans": "摘要补充提示词"
@@ -127,9 +133,9 @@ window.__ModuleLoader__.load({
     "zh-Hant": "啟用摘要提示補充",
     "zh-Hans": "启用摘要提示补充"
   },
-  "Off by default. Enable it to supplement DSH's native summary and automatic compaction behavior.": {
-    "zh-Hant": "預設關閉。啟用後補充 DSH 原生摘要提示詞。",
-    "zh-Hans": "默认关闭。启用后补充 DSH 原生摘要提示词。"
+  "On by default. Length guidance is applied after a summary is truncated unless you choose Every summary.": {
+    "zh-Hant": "預設開啟。除非選擇每次摘要，否則只在摘要截斷後加入長度指引。",
+    "zh-Hans": "默认开启。除非选择每次摘要，否则只在摘要截断后加入长度指引。"
   },
   "Output budget divisor (estimated budget ÷ O)": {
     "zh-Hant": "摘要輸出除數（估算可用預算 ÷ O）",
@@ -455,20 +461,20 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       };
       const diagnostic = (message) => translations[message] ? t(message) : language === 'en' ? message : t('Server diagnostic: ') + message;
       const [state,setState] = React.useState(null), [preview,setPreview] = React.useState(null), [result,setResult] = React.useState(null);
-      const [form,setForm] = React.useState({providerId:'',output:'',manual:false,auto:false,follow:true,summaryGuidance:false,summaryOutputDivisor:'2',summarySourceDivisor:'2',summaryPrompt:''});
+      const [form,setForm] = React.useState({providerId:'',output:'',manual:false,auto:false,follow:true,summaryGuidance:true,summaryGuidanceMode:'after-truncation',summaryOutputDivisor:'2',summarySourceDivisor:'2',summaryPrompt:''});
       const [pending,setPending] = React.useState(false), [error,setError] = React.useState(''), [loadError,setLoadError] = React.useState('');
       const [notice,setNotice] = React.useState(''), [conflict,setConflict] = React.useState(false);
       const formRef=React.useRef(form), baseline=React.useRef(null), requestSeq=React.useRef(0), alive=React.useRef(true);
       const numberValue = value => value.trim()===''?NaN:Number(value);
-      const values = (f) => ({providerId:f.providerId,outputTokens:f.manual ? (f.output.trim()==='' ? NaN : Number(f.output)) : null,autoSync:f.auto,followLoadedModel:f.follow,summaryGuidance:f.summaryGuidance,summaryOutputDivisor:numberValue(f.summaryOutputDivisor),summarySourceDivisor:numberValue(f.summarySourceDivisor),summaryPromptTemplate:f.summaryPrompt});
-      const preferences = (s) => ({providerId:s.providerId || '',outputTokens:s.outputTokens ?? null,autoSync:!!s.autoSync,followLoadedModel:s.followLoadedModel !== false,summaryGuidance:s.summaryGuidance===true,summaryOutputDivisor:s.summaryOutputDivisor??2,summarySourceDivisor:s.summarySourceDivisor??2,summaryPromptTemplate:s.summaryPromptTemplate??s.defaultSummaryPromptTemplate??''});
+      const values = (f) => ({providerId:f.providerId,outputTokens:f.manual ? (f.output.trim()==='' ? NaN : Number(f.output)) : null,autoSync:f.auto,followLoadedModel:f.follow,summaryGuidance:f.summaryGuidance,summaryGuidanceMode:f.summaryGuidanceMode,summaryOutputDivisor:numberValue(f.summaryOutputDivisor),summarySourceDivisor:numberValue(f.summarySourceDivisor),summaryPromptTemplate:f.summaryPrompt});
+      const preferences = (s) => ({providerId:s.providerId || '',outputTokens:s.outputTokens ?? null,autoSync:!!s.autoSync,followLoadedModel:s.followLoadedModel !== false,summaryGuidance:s.summaryGuidance===undefined?true:s.summaryGuidance===true,summaryGuidanceMode:s.summaryGuidanceMode??'after-truncation',summaryOutputDivisor:s.summaryOutputDivisor??2,summarySourceDivisor:s.summarySourceDivisor??2,summaryPromptTemplate:s.summaryPromptTemplate??s.defaultSummaryPromptTemplate??''});
       const equal = (a,b) => Object.keys(a).every(key=>Object.is(a[key],b[key]));
       const acceptStatus = React.useCallback((s,force=false) => {
         if (!alive.current) return;
         const next=preferences(s), old=baseline.current;
         const untouched=!old || equal(values(formRef.current),old.values);
         if (force || untouched) {
-          const nextForm={providerId:next.providerId,output:next.outputTokens==null?'':String(next.outputTokens),manual:next.outputTokens!=null,auto:next.autoSync,follow:next.followLoadedModel,summaryGuidance:next.summaryGuidance,summaryOutputDivisor:String(next.summaryOutputDivisor),summarySourceDivisor:String(next.summarySourceDivisor),summaryPrompt:next.summaryPromptTemplate};
+          const nextForm={providerId:next.providerId,output:next.outputTokens==null?'':String(next.outputTokens),manual:next.outputTokens!=null,auto:next.autoSync,follow:next.followLoadedModel,summaryGuidance:next.summaryGuidance,summaryGuidanceMode:next.summaryGuidanceMode,summaryOutputDivisor:String(next.summaryOutputDivisor),summarySourceDivisor:String(next.summarySourceDivisor),summaryPrompt:next.summaryPromptTemplate};
           formRef.current=nextForm; setForm(nextForm); setConflict(false);
           baseline.current={values:next,revision:s.settingsRevision};
         } else if (old.revision!==s.settingsRevision || !equal(old.values,next)) {
@@ -589,6 +595,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
             h('p',{'data-budget-field':'thresholdTokens'},t('Effective compaction threshold: '),format(preview.budget?.thresholdTokens),' tokens (',preview.budget?.thresholdPercent?.toFixed(2),'%)'),
             h('p',{className:'ss-muted'},t('Conversation budget = context − response output. Trigger = min(80% of context, conversation budget − headroom). Retain 16% of the conversation budget.'))),
           h('div',{'data-testid':'preview-summary-target'},h('h4',null,t('Summary target (estimate)')),
+            form.summaryGuidance&&form.summaryGuidanceMode==='after-truncation'&&h('p',{'data-testid':'summary-recovery-preview',className:'ss-muted'},t('This target applies only during recovery after a truncated summary.')),
             !form.summaryGuidance?h('p',{'data-testid':'summary-guidance-off'},t('Disabled — native summary instructions are used.')):
               summaryTargetCeiling!==null&&(summaryTargetCeiling>=256
                 ? h('p',{'data-testid':'summary-target-ceiling'},t('Maximum target for this preview: '),format(summaryTargetCeiling),' tokens (',format(preview.budget.summaryMaxTokens),' ÷ ',format(draft.summaryOutputDivisor),')')
@@ -625,6 +632,11 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         h('details',{className:'ss-card ss-options','data-testid':'summary-target'},
           h('summary',{className:'ss-option-title'},h('span',null,t('Dynamic summary target')),h('span',{className:'ss-badge'},t(form.summaryGuidance?'Enabled':'Optional'))),
           h('label',{className:'ss-check'},h('input',{type:'checkbox','data-testid':'summary-guidance-toggle','aria-label':t('Enable summary guidance'),checked:form.summaryGuidance,onChange:e=>edit({summaryGuidance:e.target.checked}),disabled:pending||!state}),t('Enable summary guidance')),
+          h('label',null,t('When to use guidance'),h('select',{'data-testid':'summary-guidance-mode','aria-label':t('When to use guidance'),value:form.summaryGuidanceMode,onChange:e=>edit({summaryGuidanceMode:e.target.value}),disabled:pending||!state||!form.summaryGuidance},
+            h('option',{value:'after-truncation'},t('After summary truncation')),h('option',{value:'always'},t('Every summary')))),
+          h('p',{'data-testid':'summary-mode-help',className:'ss-muted'},t(form.summaryGuidanceMode==='after-truncation'
+            ?'The first summary uses native instructions. If it hits the output limit, subsequent native summaries in the same conversation use guidance until a compaction succeeds. No extra retry is started.'
+            :'Guidance is added to every supported summary, including the first attempt.')),
           h('div',{className:'ss-grid'},
             h('label',null,t('Output budget divisor (estimated budget ÷ O)'),h('input',{type:'number','data-testid':'summary-output-divisor','aria-label':t('Output budget divisor (estimated budget ÷ O)'),'aria-invalid':!isDivisor(draft.summaryOutputDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summaryOutputDivisor,onChange:e=>edit({summaryOutputDivisor:e.target.value}),disabled:pending||!state})),
             h('label',null,t('Source length divisor (source estimate ÷ S)'),h('input',{type:'number','data-testid':'summary-source-divisor','aria-label':t('Source length divisor (source estimate ÷ S)'),'aria-invalid':!isDivisor(draft.summarySourceDivisor),min:1,max:Number.MAX_SAFE_INTEGER,step:'any',value:form.summarySourceDivisor,onChange:e=>edit({summarySourceDivisor:e.target.value}),disabled:pending||!state}))),

@@ -19,7 +19,7 @@ const source = fs.readFileSync(new URL('../src/client.js', import.meta.url), 'ut
 function status(overrides = {}) {
   return { providerId: 'strata', providers: [{ id: 'strata', apiKey: 'secret-that-must-not-render' }],
     outputTokens: null, autoSync: false, followLoadedModel: true, busy: false, settingsRevision: 'prefs-1',
-    summaryGuidance:true,summaryPromptTemplate:DEFAULT_SUMMARY_TEMPLATE,defaultSummaryPromptTemplate:DEFAULT_SUMMARY_TEMPLATE,...overrides };
+    summaryGuidance:true,summaryGuidanceMode:'always',summaryPromptTemplate:DEFAULT_SUMMARY_TEMPLATE,defaultSummaryPromptTemplate:DEFAULT_SUMMARY_TEMPLATE,...overrides };
 }
 function preview(overrides = {}) {
   return { fingerprint: 'preview-one', busy: false,
@@ -104,6 +104,13 @@ async function mount({ initial = status(), previewResult = preview(), failEndpoi
         input.dispatchEvent(new window.Event('input',{bubbles:true}));
       });
     },
+    async setGuidanceMode(value) {
+      const input=container.querySelector('[data-testid="summary-guidance-mode"]');
+      await act(async()=>{
+        input.value=value;
+        input.dispatchEvent(new window.Event('change',{bubbles:true}));
+      });
+    },
     async unmount() {
       if (unmounted) return; unmounted = true;
       await act(async () => { root.unmount(); });
@@ -165,15 +172,16 @@ test('all locales lead with a read-only check, then review before sync, with opt
   }
 });
 
-test('omitted summary guidance defaults off in all locales without writing preferences', async t => {
+test('omitted summary guidance defaults on in recovery mode in all locales without writing preferences', async t => {
   for (const locale of ['en','zh-Hans','zh-Hant']) {
-    const ui=await mount({initial:status({summaryGuidance:undefined}),locale});
+    const ui=await mount({initial:status({summaryGuidance:undefined,summaryGuidanceMode:undefined}),locale});
     try {
-      assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').checked,false);
+      assert.equal(ui.container.querySelector('[data-testid="summary-guidance-toggle"]').checked,true);
+      assert.equal(ui.container.querySelector('[data-testid="summary-guidance-mode"]').value,'after-truncation');
       await ui.click(ui.button(locale==='en'?'Check differences':locale==='zh-Hans'?'检查差异':'檢查差異'));
-      assert.equal(ui.container.querySelector('[data-testid="summary-target-ceiling"]'),null);
-      assert.ok(ui.container.querySelector('[data-testid="preview-summary-target"] [data-testid="summary-guidance-off"]'));
-      assert.ok(ui.container.querySelector('[data-testid="summary-guidance-off"]').textContent.includes(locale==='en'?'Disabled — native summary instructions are used.':locale==='zh-Hans'?'未启用 — 使用原生摘要指令。':'未啟用 — 使用原生摘要指令。'));
+      assert.ok(ui.container.querySelector('[data-testid="summary-target-ceiling"]'));
+      assert.equal(ui.container.querySelector('[data-testid="summary-guidance-off"]'),null);
+      assert.ok(ui.container.querySelector('[data-testid="summary-recovery-preview"]'));
       assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
     } finally { await ui.unmount(); }
   }
@@ -185,7 +193,7 @@ test('explicitly enabled summary guidance uses two 50% bounds and preview does n
   assert.match(card.textContent,/Dynamic summary target/);
   assert.match(card.textContent,/Appended to DSH's native prompt/);
   assert.match(card.textContent,/DSH keeps its native summary behavior/);
-  assert.equal(card.querySelectorAll('input,select,button,textarea').length,5);
+  assert.equal(card.querySelectorAll('input,select,button,textarea').length,6);
   assert.equal(card.querySelector('[data-testid="summary-divisor"]'),null);
   assert.equal(card.querySelector('textarea').value,DEFAULT_SUMMARY_TEMPLATE);
   assert.equal(card.querySelector('[data-testid="summary-guidance-toggle"]').checked,true);
@@ -199,6 +207,55 @@ test('explicitly enabled summary guidance uses two 50% bounds and preview does n
   assert.match(card.textContent,/Target = floor\(min\(estimated effective output budget \/ O/);
   assert.equal(ui.calls.some(c=>c.name==='configure'||c.name==='apply'),false);
   assert.ok(ui.calls.every(c=>['status','preview'].includes(c.name)));
+});
+
+test('summary recovery mode is opt-in, persists independently and has localized recovery help', async t => {
+  const ui=await mount();t.after(()=>ui.unmount());
+  const mode=ui.container.querySelector('[data-testid="summary-guidance-mode"]');
+  assert.equal(mode.value,'always');
+  assert.equal(mode.disabled,false);
+  await ui.setGuidanceMode('after-truncation');
+  await ui.poll();
+  assert.equal(mode.value,'after-truncation');
+  await ui.click(ui.button('Save preferences'));
+  assert.deepEqual(JSON.parse(JSON.stringify(ui.calls.find(c=>c.name==='configure').payload)),{
+    summaryGuidanceMode:'after-truncation',expectedRevision:'prefs-1',
+  });
+  await ui.poll();
+  assert.equal(mode.value,'after-truncation');
+  await ui.click(ui.button('Check differences'));
+  for(const [locale,label,choice,help] of [
+    ['en','When to use guidance','After summary truncation','No extra retry is started.'],
+    ['zh-Hant','何時使用長度指引','摘要截斷後','不會額外啟動重試'],
+    ['zh-Hans','何时使用长度指引','摘要截断后','不会额外启动重试'],
+  ]){
+    await ui.changeLanguage(locale);
+    assert.equal(mode.getAttribute('aria-label'),label);
+    assert.equal(mode.selectedOptions[0].textContent,choice);
+    assert.ok(ui.container.querySelector('[data-testid="summary-mode-help"]').textContent.includes(help));
+    assert.ok(ui.container.querySelector('[data-testid="summary-recovery-preview"]'));
+  }
+  await ui.changeLanguage('en');
+  await ui.click(ui.container.querySelector('[data-testid="summary-guidance-toggle"]'));
+  await ui.click(ui.button('Save preferences'));
+  assert.equal(mode.disabled,true);
+  assert.equal(mode.value,'after-truncation');
+  assert.deepEqual(JSON.parse(JSON.stringify(ui.calls.filter(c=>c.name==='configure').at(-1).payload)),{
+    summaryGuidance:false,expectedRevision:'prefs-1-saved',
+  });
+  assert.equal(ui.calls.some(c=>c.name==='apply'),false);
+});
+
+test('summary mode polling preserves unsaved edits and detects external mode conflicts', async t => {
+  const ui=await mount();t.after(()=>ui.unmount());
+  const mode=ui.container.querySelector('[data-testid="summary-guidance-mode"]');
+  await ui.setDivisor('3');
+  ui.setStatus({summaryGuidanceMode:'after-truncation',settingsRevision:'prefs-2'});
+  await ui.poll();
+  assert.equal(mode.value,'always');
+  assert.equal(ui.button('Save preferences').disabled,true);
+  await ui.click(ui.button('Reload latest preferences'));
+  assert.equal(mode.value,'after-truncation');
 });
 
 test('summary preview ceiling follows context and summary cap without claiming the actual target', async t => {
@@ -338,7 +395,7 @@ test('compact summary card displays the exact editable prompt and hides detailed
   assert.equal(editor.closest('details')===card,true);
   assert.equal(card.open,false);
   assert.equal(details.open,false);
-  assert.equal(card.querySelectorAll(':scope > p').length,1);
+  assert.equal(card.querySelectorAll(':scope > p').length,2);
   assert.equal(card.querySelector('[data-testid="summary-output-divisor"]').closest('details')===card,true);
   assert.equal(card.querySelector('[data-testid="summary-source-divisor"]').closest('details')===card,true);
   assert.equal(ui.button('Restore default prompt').disabled,true);

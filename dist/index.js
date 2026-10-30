@@ -11,7 +11,8 @@ export const Config = z.object({
   autoSync: z.boolean().default(false),
   followLoadedModel: z.boolean().default(true),
   outputTokens: z.number().step(1).min(1),
-  summaryGuidance: z.boolean().default(false),
+  summaryGuidance: z.boolean().default(true),
+  summaryGuidanceMode: z.union(['always', 'after-truncation']).default('after-truncation'),
   summaryOutputDivisor: z.number().min(1).max(Number.MAX_SAFE_INTEGER).default(2),
   summarySourceDivisor: z.number().min(1).max(Number.MAX_SAFE_INTEGER).default(2),
   summaryPromptTemplate: z.string().default(DEFAULT_SUMMARY_TEMPLATE),
@@ -145,7 +146,8 @@ export function apply(ctx, initialConfig) {
   function publicSettings(value = settings) {
     return { providerId: value.providerId ?? '', autoSync: value.autoSync ?? false,
       followLoadedModel: value.followLoadedModel ?? true, outputTokens: value.outputTokens ?? null,
-      summaryGuidance: value.summaryGuidance ?? false,
+        summaryGuidance: value.summaryGuidance ?? true,
+      summaryGuidanceMode: value.summaryGuidanceMode ?? 'after-truncation',
       summaryOutputDivisor: value.summaryOutputDivisor ?? 2, summarySourceDivisor: value.summarySourceDivisor ?? 2,
       summaryPromptTemplate: value.summaryPromptTemplate ?? DEFAULT_SUMMARY_TEMPLATE };
   }
@@ -439,7 +441,7 @@ export function apply(ctx, initialConfig) {
   }
   async function configure(request) {
     ensureOpen();
-    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens', 'summaryGuidance', 'summaryOutputDivisor', 'summarySourceDivisor', 'summaryPromptTemplate', 'expectedRevision']);
+    payload(request, ['providerId', 'autoSync', 'followLoadedModel', 'outputTokens', 'summaryGuidance', 'summaryGuidanceMode', 'summaryOutputDivisor', 'summarySourceDivisor', 'summaryPromptTemplate', 'expectedRevision']);
     refreshSettings();
     if (typeof request.expectedRevision !== 'string' || request.expectedRevision !== hash(publicSettings())) {
       refuse('stale-settings', 'Sync preferences changed. Reload the latest preferences before saving.');
@@ -459,6 +461,10 @@ export function apply(ctx, initialConfig) {
       if (!own(request, key)) continue;
       if (!validSummaryDivisor(request[key])) refuse('invalid-budget', 'Summary divisors must be finite numbers from 1 to Number.MAX_SAFE_INTEGER.');
       next[key] = request[key];
+    }
+    if (own(request, 'summaryGuidanceMode')) {
+      if (!['always', 'after-truncation'].includes(request.summaryGuidanceMode)) refuse('invalid-request', 'Choose a supported summary guidance mode.');
+      next.summaryGuidanceMode = request.summaryGuidanceMode;
     }
     if (own(request, 'summaryPromptTemplate')) {
       if (!validSummaryTemplate(request.summaryPromptTemplate)) refuse('invalid-request', 'Summary prompt must include {target} and be at most 2048 characters.');
