@@ -246,7 +246,7 @@ test('malformed JSON, oversized payloads, and redirects fail without leaking bod
 
 test('network errors and credential validation do not expose credentials', async () => {
   await assert.rejects(discoverStrata('https://strata.test', 'private-api-key', { fetch: async () => { throw new Error('private-api-key'); } }), error => error.code === 'CONNECTION_FAILED' && !error.message.includes('private-api-key'));
-  await assert.rejects(discoverStrata('https://strata.test', 'bad\nkey'), errorCode('INVALID_CREDENTIAL'));
+  await assert.rejects(discoverStrata('https://strata.test', 'bad\r\nkey'), errorCode('INVALID_CREDENTIAL'));
 });
 
 test('timeout aborts the metadata fetch', async () => {

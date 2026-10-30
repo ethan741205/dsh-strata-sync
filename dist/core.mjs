@@ -210,7 +210,7 @@ function slotContext(payload, modelIds, loadedCount) {
  */
 export async function discoverStrata(baseURL, apiKey = '', options = {}) {
   const normalized = normalizeBaseURL(baseURL);
-  if (typeof apiKey !== 'string' || apiKey.length > 8192 || /[\n\u0000]/u.test(apiKey)) {
+  if (typeof apiKey !== 'string' || apiKey.length > 8192 || /[\r\n\u0000]/u.test(apiKey)) {
     fail('INVALID_CREDENTIAL', 'The API key contains invalid characters.');
   }
   const fetchImpl = options.fetch ?? globalThis.fetch;
@@ -262,7 +262,7 @@ export async function discoverStrata(baseURL, apiKey = '', options = {}) {
       verifiedStrata: typeof props.build_info === 'string' && /^Strata \d+\.\d+(?:\.\d+)?(?:\b|$)/u.test(props.build_info),
       modelMatched: selectedIds.has(props.model_alias),
       templateHash: typeof props.chat_template === 'string'
-        ? createHash('sha256').update(props.chat_template.replace(/\n/g, '\n')).digest('hex') : null,
+        ? createHash('sha256').update(props.chat_template.replace(/\r\n/g, '\n')).digest('hex') : null,
     };
   } catch { /* Optional metadata: preserve reasoning and calculate output on failure. */ }
   let serverOutputTokens = null;
