@@ -11,7 +11,7 @@ Validation date: 2026-10-30 (Asia/Taipei).
 
 ## Automated verification
 
-All **184 automated tests pass** for version 0.11.0. Coverage includes:
+All **184 automated tests pass** for version 0.11.1. Coverage includes:
 
 - Runtime monitoring on a separate 60-second timer, including while Settings is closed and Agent tasks run. It makes metadata GET requests only: no configuration writes, backups, preset activation or inference. Startup synchronization still runs once.
 - Loaded-model switches, context/output changes, manual acknowledgement of an already configured model, explicit synchronization, transient failure/recovery, incomplete metadata, cancellation, overlapping checks, hot reload, concurrent edits and late responses. Failed or mixed metadata cannot produce a live aligned status.

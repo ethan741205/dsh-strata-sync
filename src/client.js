@@ -435,6 +435,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       SLOTS_CONTEXT_UNAVAILABLE: 'Live slots do not report a context size. Using the model context reported by Strata.',
       SLOTS_OVERRIDE_MODEL_CONTEXT: 'The active engine context differs from the model metadata. Using the active engine context.',
     };
+    const modelCss = '.strata-sync code.ss-model{font-size:16px;font-weight:600;line-height:1.5;white-space:normal;overflow-wrap:anywhere}.strata-sync table code.ss-model{font-size:14px}';
     function normalizeLanguage(id) {
       const tag = String(id || 'en').toLowerCase();
       if (/^zh(?:-|$)/.test(tag)) return /(?:hant|tw|hk|mo)(?:-|$)/.test(tag) ? 'zh-Hant' : 'zh-Hans';
@@ -446,6 +447,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
       const format = (value) => value == null ? t('Not set') : typeof value === 'string' ? t(value) : fmt(value);
       const renderValue = (field,value) => {
         if (value == null) return h('span',{className:'ss-empty'},t('Not set'));
+        if (['model','modelId','defaultModel'].includes(field) && typeof value === 'string') return h('code',{className:'ss-model'},value);
         if (Array.isArray(value)) return h('div',{className:'ss-values'},...value.map((v,i)=>h('span',{className:'ss-chip',key:i},v==='text'?t('Text'):v==='image'?t('Image'):String(v))));
         if (field==='reasoningEfforts' && typeof value==='object') return h('div',{className:'ss-values'},...Object.entries(value).map(([key,wire])=>h('span',{className:'ss-chip',key},wire===key?key:key+' → '+format(wire))));
         if (typeof value==='object') return h('details',{className:'ss-details'},h('summary',null,t('View mapping')),h('pre',null,JSON.stringify(value,null,2)));
@@ -529,12 +531,12 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         h('div',null,h('strong',null,outputSource(budget)),h('div',{className:'ss-muted'},t('Output limit source: '))));
       const warnings=(items)=>(items||[]).map((w,i)=>h('div',{key:i,className:'ss-status ss-error'},typeof w==='string'?(t(warningText[w])||(w.startsWith('SLOTS_')?t('Live slot information is unavailable. Using the model context reported by Strata.'):w)):JSON.stringify(w)));
       return h('section',{className:'strata-sync','aria-label':'dsh-strata-sync'},
-        h('style',null,css+workflowCss),
+        h('style',null,css+workflowCss+modelCss),
         h('header',null,h('h2',null,'dsh-strata-sync'),h('p',{className:'ss-muted'},t('Sync the model and context budgets from Strata Server to DSH.'))),
         liveTitle&&h('div',{className:'ss-status'+(liveWarning?' ss-error':''),'data-testid':'live-check',role:'status','aria-live':'polite'},
           h('strong',null,t(liveTitle)),
-          ['aligned','mismatch'].includes(liveCheck.state)&&h('p',null,t('Model'),': ',h('code',null,liveCheck.modelId), ' · ',t('Context window'),': ',format(liveCheck.contextWindow)),
-          liveCheck.modelChanged&&liveCheck.previousModelId&&h('p',{className:'ss-muted'},t('Previously detected model'),': ',h('code',null,liveCheck.previousModelId),liveCheck.previousContextWindow?' · '+format(liveCheck.previousContextWindow)+' tokens':''),
+          ['aligned','mismatch'].includes(liveCheck.state)&&h('p',null,t('Model'),': ',h('code',{className:'ss-model'},liveCheck.modelId), ' · ',t('Context window'),': ',format(liveCheck.contextWindow)),
+          liveCheck.modelChanged&&liveCheck.previousModelId&&h('p',{className:'ss-muted'},t('Previously detected model'),': ',h('code',{className:'ss-model'},liveCheck.previousModelId),liveCheck.previousContextWindow?' · '+format(liveCheck.previousContextWindow)+' tokens':''),
           liveCheck.state==='mismatch'&&h('p',null,t('Check differences, sync, then start a new conversation. Existing conversations keep their previous settings.')),
           liveCheck.state==='aligned'&&h('p',{className:'ss-muted'},t('Existing conversations may still use an earlier compaction policy.')),
           liveCheck.state==='unavailable'&&h('p',null,t('Previous sync results may be outdated. Check the server connection and try Check differences.')),
@@ -561,7 +563,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         preview&&h('div',{className:'ss-card','data-testid':'sync-preview'},
           h('h3',null,t('Review changes')),
           preview.changes?.length>0&&h('p',{className:'ss-muted'},t('Review the changes below, then back up and sync.')),
-          h('strong',null,'Strata Server'),h('p',null,h('code',null,preview.server?.model?.id)),
+          h('strong',null,'Strata Server'),h('p',null,h('code',{className:'ss-model'},preview.server?.model?.id)),
           h('div',{className:'ss-grid'},
             h('div',null,h('strong',null,format(preview.budget?.contextWindow)),h('div',{className:'ss-muted'},t('Context tokens'))),
             h('div',null,h('strong',null,format(preview.budget?.outputTokens)),h('div',{className:'ss-muted'},t('Response output limit'))),
@@ -603,7 +605,7 @@ REASONING_DEFAULT_CONFLICT: 'The provider default reasoning level is not support
         !preview&&!result&&h('p',{className:'ss-muted'},t('Check differences before syncing.'))),
         displayedResult?.budget&&h('div',{className:'ss-card','data-testid':'sync-result'},
           h('strong',null,t('Latest synchronization result')),h('p',{className:'ss-muted'},t('This records the last synchronization, not a live server check.')),
-          h('p',null,t('Model'),': ',h('code',null,displayedResult.modelId)),h('p',null,t('Context window'),': ',format(displayedResult.budget.contextWindow)),
+          h('p',null,t('Model'),': ',h('code',{className:'ss-model'},displayedResult.modelId)),h('p',null,t('Context window'),': ',format(displayedResult.budget.contextWindow)),
           outputValues(displayedResult.budget,displayedResult),!liveWarning&&alignment(displayedResult),
           h('p',null,t(displayedResult.backupPath?'Backup created':'No settings changed; no new backup was needed.')),
           displayedResult.backupPath&&h('p',{className:'ss-muted'},t('Original settings backup: '),h('code',null,displayedResult.backupPath)),
