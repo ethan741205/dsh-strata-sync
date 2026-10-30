@@ -5,7 +5,7 @@ const NATIVE_HEADINGS = ['Primary Request and Intent', 'Key Technical Concepts',
 const GUIDANCE_PREFIX = 'Keep the entire checkpoint, including all required headings, within a target of ';
 const positive = value => Number.isSafeInteger(value) && value > 0;
 export const validSummaryDivisor = value => typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= Number.MAX_SAFE_INTEGER;
-export const DEFAULT_SUMMARY_TEMPLATE = `${GUIDANCE_PREFIX}{target} tokens by retaining only information essential to continue the remaining work, consolidating prior summaries, and removing redundant or obsolete details.`;
+export const DEFAULT_SUMMARY_TEMPLATE = `${GUIDANCE_PREFIX}{target} tokens.`;
 export const validSummaryTemplate = value => typeof value === 'string' && value.length <= 2048 && value.includes('{target}');
 // Share identity across hot reloads/copies without adding fields to native requests.
 const augmentedMessages = globalThis[Symbol.for('dsh-strata-sync/summary-augmented')] ??= new WeakSet();

@@ -17,6 +17,11 @@
 
 外掛僅以唯讀方式存取 Strata Server。同步不會切換或載入伺服器模型、修改伺服器設定，也不會傳送測試推論請求。無法確認的模型能力會保留 DSH 原有值。
 
+## 0.12.9 更新內容
+
+- 預設摘要補充提示詞現在只設定目標長度：`Keep the entire checkpoint, including all required headings, within a target of {target} tokens.`
+- 檢查點的內容與結構仍依照 DSH 原生摘要指令。已儲存的自訂提示詞會繼續使用，直到編輯或重設為預設值。
+
 ## 0.12.8 更新內容
 
 - 在原生會話日誌記錄每次計算的摘要目標、是否確實加入指令，以及略過原因。
@@ -107,7 +112,7 @@ dsh plugin --profile desktop add dsh-strata-sync --registry=https://registry.npm
 可編輯的**摘要補充提示詞**預設內容為：
 
 ```text
-Keep the entire checkpoint, including all required headings, within a target of {target} tokens by retaining only information essential to continue the remaining work, consolidating prior summaries, and removing redundant or obsolete details.
+Keep the entire checkpoint, including all required headings, within a target of {target} tokens.
 ```
 
 請保留 `{target}`，每次套用指引時，它會替換成計算出的 token 目標。範本最多 2,048 個字元。點選**還原預設提示詞**可重設內容，再點選**儲存偏好**套用修改。

@@ -17,6 +17,11 @@ The plugin reads Strata's model information, previews the changes, and updates D
 
 Strata Server is read-only to this plugin. Synchronization does not switch or load server models, change server settings, or send test inference requests. Unconfirmed model capabilities keep their existing DSH values.
 
+## What's new in 0.12.9
+
+- The default summary supplement now only sets the target length: `Keep the entire checkpoint, including all required headings, within a target of {target} tokens.`
+- DSH's native summary instruction continues to define the checkpoint's content and structure. Existing custom templates remain in use until edited or reset to the default.
+
 ## What's new in 0.12.8
 
 - Native session diagnostics record each calculated summary target, whether the instruction was actually applied, and why it was skipped.
@@ -107,7 +112,7 @@ The mode is saved as `summaryGuidanceMode`; `summaryGuidance` remains the enable
 The editable **Supplemental summary prompt** starts with:
 
 ```text
-Keep the entire checkpoint, including all required headings, within a target of {target} tokens by retaining only information essential to continue the remaining work, consolidating prior summaries, and removing redundant or obsolete details.
+Keep the entire checkpoint, including all required headings, within a target of {target} tokens.
 ```
 
 Keep `{target}` in your text—it is replaced with the calculated token target whenever guidance applies. The template can contain up to 2,048 characters. Use **Restore default prompt** to reset it, then **Save preferences** to apply your choice.

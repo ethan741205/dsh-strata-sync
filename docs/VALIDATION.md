@@ -10,10 +10,11 @@ Validation date: 2026-10-31 (Asia/Taipei).
 - The writing target is the smaller of estimated effective summary output budget / output divisor and selected-source estimate / source divisor, rounded down. Both divisors default to 2 (50%).
 - Effective output room is estimated against the supported pi-ai 1.1.0 context clamp, including the supplement, system text and tools. It is not a server tokenizer result. Reasoning and later request transformations can reduce usable answer space.
 - The native summary prompt and request options are preserved. Unknown content, unverified metadata and targets below 256 tokens keep native behavior. The hook sends no extra inference requests and adds no retry loop.
+- Version 0.12.9 shortens the default supplement to a target-length instruction only. DSH's native content and formatting requirements still apply; saved custom templates retain their configured text.
 
 ## Automated verification
 
-Version **0.12.8 passed 238 automated tests** plus native session persistence verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
+Version **0.12.9 passed 238 automated tests** plus native session persistence verification. Unspecified summary guidance is enabled in both host and interface defaults, using after-truncation mode. Explicit disable choices are preserved. Coverage includes the cases below.
 
 - Native audit decisions preserve the calculated candidate (including rejected small values), applied state and skip reason; stream records preserve terminal outcome and numeric usage. Records are bounded, use a field whitelist, and never copy prompts, summaries or raw exception messages.
 - Audit failures preserve native chunks, error identity, cancellation and iterator cleanup. Duplicate hooks, mixed disabled/enabled hooks, settings changes during discovery, concurrent attempts, early closure before first iteration, hot reload and missing host services are covered.
