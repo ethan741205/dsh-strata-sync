@@ -15,6 +15,22 @@ const reasons = ['applied', 'disabled', 'invalid-settings', 'awaiting-truncation
   'invalid-max-tokens', 'missing-session-route', 'context-unavailable', 'target-too-small',
   'settings-changed', 'cancelled', 'messages-changed', 'closed', 'non-writable', 'unsupported-prompt',
   'effective-budget-unavailable', 'insufficient-output-budget'];
+const inputIssueCodes = ['unsupported-image', 'image-access-unavailable', 'unsupported-file', 'unsupported-block', 'unsupported-role',
+  'invalid-field-type', 'invalid-json', 'empty-source', 'token-overflow'];
+function inputIssue(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const stage = choice(value.stage, ['source', 'budget']);
+  const code = choice(value.code, inputIssueCodes);
+  if (stage === null || code === null) return null;
+  // Only fixed categories may cross this boundary. Never retain a caller's
+  // actual role/type/field string, attachment, path, or arbitrary nested data.
+  return { stage, code,
+    role: choice(value.role, ['system', 'user', 'assistant', 'tool', 'unknown']),
+    blockType: choice(value.blockType, ['text', 'reasoning', 'tool-call', 'image', 'file', 'unknown']),
+    field: choice(value.field, ['messages', 'content', 'text', 'name', 'arguments', 'attachment',
+      'attachmentId', 'mediaType', 'bytes', 'width', 'height', 'originalDimensions', 'system', 'tools']),
+  };
+}
 
 /** Small, optional native records. Neither this state nor its persistence is
  * used to decide whether to alter a summary or to retry an inference request.
@@ -150,10 +166,14 @@ export function createSummaryAudit(ctx, { appendPluginRecord, pluginVersion, onW
                 outputDivisor: divisor(data.outputDivisor), sourceDivisor: divisor(data.sourceDivisor),
                 requestedMaxTokens: nonnegative(data.requestedMaxTokens),
                 sourceTokensEstimated: nonnegative(data.sourceTokensEstimated),
+                sourceImageCount: nonnegative(data.sourceImageCount),
+                sourceImageTokensEstimated: nonnegative(data.sourceImageTokensEstimated),
                 effectiveOutputTokensEstimated: nonnegative(data.effectiveOutputTokensEstimated),
+                budgetImageTokensEstimated: nonnegative(data.budgetImageTokensEstimated),
                 targetTokens: nonnegative(data.targetTokens), applied: data.applied === true,
                 appliedTargetTokens: data.applied === true ? nonnegative(data.targetTokens) : null,
                 reason: choice(data.reason, reasons),
+                inputIssue: inputIssue(data.inputIssue),
               });
             } catch { warn(); }
           },

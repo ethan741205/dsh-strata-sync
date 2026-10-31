@@ -51,67 +51,140 @@ export function nativeSummaryMessage(options) {
   return message;
 }
 
-/** Match DSH's text heuristic: four characters/token plus block/role framing.
- * Price only the selected conversation span, never the system prompt, tool
- * schemas, or final summary instruction. Unknown attachment pricing falls
- * back to native behavior rather than inventing a visual/file token count.
+const imageMedia = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+function resetEstimate(details) {
+  Object.assign(details, { imageCount: 0, imageTokens: 0, inputIssue: null });
+}
+function inputFailure(details, stage, code, role = null, blockType = null, field = null) {
+  details.inputIssue = { stage, code,
+    role: role === null ? null : ['system', 'user', 'assistant', 'tool'].includes(role) ? role : 'unknown',
+    blockType: blockType === null ? null : ['text', 'reasoning', 'tool-call', 'image', 'file'].includes(blockType) ? blockType : 'unknown', field };
+  return null;
+}
+// Validate the installed host's durable image reference without reading image
+// bytes or resolving an arbitrary URL. No field value is copied into diagnostics.
+function imageReference(block, details, stage, role) {
+  const fail = (code, field) => inputFailure(details, stage, code, role, 'image', field);
+  const ref = block.attachment;
+  if (ref === undefined) return fail('unsupported-image', 'attachment');
+  if (!object(ref)) return fail('invalid-field-type', 'attachment');
+  if (typeof ref.attachmentId !== 'string') return fail('invalid-field-type', 'attachmentId');
+  if (!/^sha256:[a-f0-9]{64}$/.test(ref.attachmentId)) return fail('unsupported-image', 'attachmentId');
+  if (typeof ref.mediaType !== 'string') return fail('invalid-field-type', 'mediaType');
+  if (!imageMedia.includes(ref.mediaType)) return fail('unsupported-image', 'mediaType');
+  for (const field of ['bytes', 'width', 'height']) if (!positive(ref[field])) return fail('invalid-field-type', field);
+  if (ref.name !== undefined && typeof ref.name !== 'string') return fail('invalid-field-type', 'name');
+  if (ref.originalDimensions !== undefined && (!object(ref.originalDimensions)
+      || !positive(ref.originalDimensions.width) || !positive(ref.originalDimensions.height))) return fail('invalid-field-type', 'originalDimensions');
+  return ref;
+}
+// Installed dsh-llm requestImageHandleText format. Previews never enlarge the
+// source, so the source dimensions conservatively bound the preview's digits.
+// Access paths come from the same metadata-only host resolver as the adapter.
+function imageHandleText(ref, access) {
+  const identity = ref.name === undefined ? ref.attachmentId : `${JSON.stringify(ref.name)} (${ref.attachmentId})`;
+  const preview = `Image ${identity}; request preview ${ref.width}x${ref.height}px.`;
+  if (access === undefined) return `${preview} It may be resized or re-encoded; source dimensions, format, and byte size may differ.`;
+  if (!object(access) || typeof access.readonlyPath !== 'string') throw new TypeError('Invalid image access metadata.');
+  const ext = ref.mediaType === 'image/jpeg' ? 'jpg' : ref.mediaType.slice(6);
+  return `${preview} Normalized copy (read-only; may be resized or re-encoded): ${JSON.stringify(access.readonlyPath)} (${ref.width}x${ref.height}px, ${ref.mediaType}). Source dimensions, format, and byte size may differ. Copy to a writable path ending in .${ext} before editing.`;
+}
+
+/** Match the installed DSH source heuristic: four characters/token plus
+ * framing, including serialized image references (not a visual token count).
+ * Never price system text, tool schemas or the final summary instruction here.
+ * Optional details contain only fixed diagnostic categories and numeric costs.
  */
-export function estimateSummarySource(messages) {
-  if (!Array.isArray(messages) || messages.length < 2) return null;
+export function estimateSummarySource(messages, details = {}) {
+  resetEstimate(details);
+  const fail = (code, role, block, field) => inputFailure(details, 'source', code, role, block, field);
+  if (!Array.isArray(messages)) return fail('invalid-field-type', null, null, 'messages');
+  if (messages.length < 2) return fail('empty-source', null, null, 'messages');
   let tokens = 0;
   for (const message of messages.slice(0, -1)) {
     if (message?.role === 'system') continue;
-    if (!['user', 'assistant', 'tool'].includes(message?.role) || !Array.isArray(message.content)) return null;
+    if (!['user', 'assistant', 'tool'].includes(message?.role)) return fail('unsupported-role', message?.role ?? 'unknown');
+    if (!Array.isArray(message.content)) return fail('invalid-field-type', message.role, null, 'content');
     tokens += 4;
     for (const block of message.content) {
-      if (['text', 'reasoning'].includes(block?.type) && typeof block.text === 'string') {
+      if (['text', 'reasoning'].includes(block?.type)) {
+        if (typeof block.text !== 'string') return fail('invalid-field-type', message.role, block.type, 'text');
         tokens += 4 + Math.ceil(block.text.length / 4);
-      } else if (block?.type === 'tool-call' && typeof block.name === 'string' && typeof block.arguments === 'string') {
+      } else if (block?.type === 'tool-call') {
+        for (const field of ['name', 'arguments']) if (typeof block[field] !== 'string') return fail('invalid-field-type', message.role, block.type, field);
         tokens += 4 + Math.ceil(block.name.length / 4) + Math.ceil(block.arguments.length / 4);
-      } else return null;
+      } else if (block?.type === 'image') {
+        const ref = imageReference(block, details, 'source', message.role);
+        if (!ref) return null;
+        let cost;
+        try { const { offloaded, ...reference } = block; cost = 4 + Math.ceil(JSON.stringify(reference).length / 4); }
+        catch { return fail('invalid-json', message.role, block.type, 'attachment'); }
+        tokens += cost; details.imageCount++; details.imageTokens += cost;
+      } else return fail(block?.type === 'file' ? 'unsupported-file' : 'unsupported-block', message.role, block?.type ?? 'unknown');
     }
   }
-  return positive(tokens) ? tokens : null;
+  return positive(tokens) ? tokens : fail(tokens === 0 ? 'empty-source' : 'token-overflow');
 }
 
-/** Conservative text-only estimate of the output room before provider dispatch.
+/** Conservative estimate of the output room before provider dispatch.
  * The supported DSH adapter uses pi-ai 1.1.0: 3.5 chars/token and
  * reserves 4096 tokens before clamping maxTokens. Replayed assistant usage is
  * zeroed by DSH. Include system text, tool schemas and framing as well, even
- * where that adapter's heuristic omits them. This is NOT a tokenizer count or
- * the server's final cap; unknown content leaves the native prompt untouched.
+ * where that adapter's heuristic omits them. Each native image costs pi-ai's
+ * 4800 estimated characters plus its host-generated text handle and framing.
+ * This is NOT a tokenizer count or the server's final cap.
  */
-export function estimateEffectiveSummaryBudget(options, contextWindow, template = DEFAULT_SUMMARY_TEMPLATE) {
-  if (!positive(contextWindow) || !positive(options?.maxTokens) || !validSummaryTemplate(template) || !Array.isArray(options.messages)) return null;
+export function estimateEffectiveSummaryBudget(options, contextWindow, template = DEFAULT_SUMMARY_TEMPLATE, details = {}, resolveImageAccess = () => undefined) {
+  resetEstimate(details);
+  const fail = (code, role, block, field) => inputFailure(details, 'budget', code, role, block, field);
+  if (!positive(contextWindow) || !positive(options?.maxTokens) || !validSummaryTemplate(template)) return null;
+  if (!Array.isArray(options.messages)) return fail('invalid-field-type', null, null, 'messages');
   const price = text => Math.ceil(text.length / 3.5) + 4;
   let input = 0;
   try {
     if (options.system !== undefined) {
-      if (typeof options.system !== 'string') return null;
+      if (typeof options.system !== 'string') return fail('invalid-field-type', null, null, 'system');
       input += price(options.system);
     }
     if (options.tools !== undefined) {
-      if (!Array.isArray(options.tools)) return null;
-      input += price(JSON.stringify(options.tools));
+      if (!Array.isArray(options.tools)) return fail('invalid-field-type', null, null, 'tools');
+      try { input += price(JSON.stringify(options.tools)); }
+      catch { return fail('invalid-json', null, null, 'tools'); }
     }
     for (const message of options.messages) {
-      if (!['system', 'user', 'assistant', 'tool'].includes(message?.role) || !Array.isArray(message.content)) return null;
+      if (!['system', 'user', 'assistant', 'tool'].includes(message?.role)) return fail('unsupported-role', message?.role ?? 'unknown');
+      if (!Array.isArray(message.content)) return fail('invalid-field-type', message.role, null, 'content');
       input += 4;
-      if (message.role === 'tool' && !message.content.some(block => block.type === 'text' && block.text?.length)) input += price('(no output)');
+      if (message.role === 'tool' && !message.content.some(block => block?.type === 'text' && block.text?.length)) input += price('(no output)');
       for (const block of message.content) {
-        if (['text', 'reasoning'].includes(block?.type) && typeof block.text === 'string') input += price(block.text);
-        else if (block?.type === 'tool-call' && typeof block.name === 'string' && typeof block.arguments === 'string') {
+        if (['text', 'reasoning'].includes(block?.type)) {
+          if (typeof block.text !== 'string') return fail('invalid-field-type', message.role, block.type, 'text');
+          input += price(block.text);
+        } else if (block?.type === 'tool-call') {
+          for (const field of ['name', 'arguments']) if (typeof block[field] !== 'string') return fail('invalid-field-type', message.role, block.type, field);
           // JSON normalization can expand compact numeric literals (e.g. 1e9).
-          const normalized = JSON.stringify(JSON.parse(block.arguments));
+          let normalized;
+          try { normalized = JSON.stringify(JSON.parse(block.arguments)); }
+          catch { return fail('invalid-json', message.role, block.type, 'arguments'); }
           input += price(block.name) + Math.max(price(block.arguments), price(normalized));
-        } else return null;
+        } else if (block?.type === 'image') {
+          const ref = imageReference(block, details, 'budget', message.role);
+          if (!ref) return null;
+          let handle;
+          try { handle = imageHandleText(ref, resolveImageAccess(ref)); }
+          catch { return fail('image-access-unavailable', message.role, block.type, 'attachment'); }
+          const cost = Math.ceil(4800 / 3.5) + 4 + price(handle)
+            + (message.role === 'tool' ? price('Attached image(s) from tool result:') + 8 : 0);
+          input += cost; details.imageCount++; details.imageTokens += cost;
+        } else return fail(block?.type === 'file' ? 'unsupported-file' : 'unsupported-block', message.role, block?.type ?? 'unknown');
       }
     }
     // Reserve the longest possible rendered supplement once, avoiding a
     // self-referential target calculation. The target never exceeds maxTokens.
     input += price('\n- ' + summaryInstruction(options.maxTokens, template));
-  } catch { return null; }
-  if (!Number.isSafeInteger(input)) return null;
+  } catch { return fail('invalid-field-type'); }
+  if (!Number.isSafeInteger(input)) return fail('token-overflow');
   return Math.max(0, Math.min(options.maxTokens, contextWindow - input - 4096));
 }
 
@@ -128,6 +201,19 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
   const commits = new Map();
   let attempt = 0;
   let preferenceAudit;
+  function resolveImageAccess(ref) {
+    // Same synchronous metadata-only resolution as the native pi-ai adapter.
+    // Never read the image, fetch a URL, or retain/log the resulting path.
+    const attachments = ctx.get('attachments');
+    if (!attachments) return undefined;
+    const hostPath = attachments.imageHostPath(ref);
+    if (hostPath === undefined) return undefined;
+    if (typeof hostPath !== 'string') throw new TypeError('Invalid image host path metadata.');
+    const readonlyPath = ctx.get('fs')?.processPathFromHostPath(hostPath);
+    if (readonlyPath === undefined) return undefined;
+    if (typeof readonlyPath !== 'string') throw new TypeError('Invalid image access metadata.');
+    return { readonlyPath };
+  }
   // Auditing is observational: a missing/throwing sink must never replace a
   // native stream, change its chunks, or turn a cancellation into an error.
   function beginAudit(options) {
@@ -277,7 +363,8 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
     const selected = preferences();
     if (closed || options?.purpose !== 'compaction' || observedRequests.has(options) || augmentedMessages.has(options.messages)) return next();
     const decision = { ...preferenceAudit, requestedMaxTokens: positive(options.maxTokens) ? options.maxTokens : null,
-      sourceTokensEstimated: null, effectiveOutputTokensEstimated: null, targetTokens: null, applied: false };
+      sourceTokensEstimated: null, effectiveOutputTokensEstimated: null, targetTokens: null, applied: false,
+      sourceImageCount: null, sourceImageTokensEstimated: null, budgetImageTokensEstimated: null, inputIssue: null };
     const skip = reason => passthrough(options, next, { ...decision, reason });
     const native = nativeSummaryMessage(options);
     const descriptor = options && Object.getOwnPropertyDescriptor(options, 'messages');
@@ -289,9 +376,14 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
     if (!selected) return skip(decision.enabled === false ? 'disabled' : 'invalid-settings');
     const key = selected.mode === 'after-truncation' ? recoveryKey(options) : null;
     if (selected.mode === 'after-truncation' && key === null) return skip('missing-session-route');
-    const sourceTokens = estimateSummarySource(options.messages);
+    const sourceDetails = {};
+    const sourceTokens = estimateSummarySource(options.messages, sourceDetails);
     decision.sourceTokensEstimated = sourceTokens;
-    if (!positive(sourceTokens)) return skip('unsupported-input');
+    decision.inputIssue = sourceDetails.inputIssue;
+    if (sourceTokens !== null) {
+      decision.sourceImageCount = sourceDetails.imageCount;
+      decision.sourceImageTokensEstimated = sourceDetails.imageTokens;
+    }
     if (!positive(options.maxTokens)) return skip('invalid-max-tokens');
     const claim = {};
     if (audit) auditClaims.set(options, claim);
@@ -304,15 +396,20 @@ export function installSummaryGuidance(ctx, resolveContext, getSettings = () => 
       let augmented;
       observedRequests.add(options);
       try {
-        decision.reason = 'awaiting-truncation';
-        if (selected.mode === 'always' || observation.state.armed) {
+        // Observe terminal outcomes even when this input cannot be estimated:
+        // its truncation can arm the next supported request for this session.
+        decision.reason = positive(sourceTokens) ? 'awaiting-truncation' : 'unsupported-input';
+        if (positive(sourceTokens) && (selected.mode === 'always' || observation.state.armed)) {
           let contextWindow;
           try { contextWindow = await resolveContext(options); }
           catch { /* Metadata/compatibility failure must not break native inference. */ }
-          const effectiveOutput = estimateEffectiveSummaryBudget(options, contextWindow, selected.template);
+          const budgetDetails = {};
+          const effectiveOutput = estimateEffectiveSummaryBudget(options, contextWindow, selected.template, budgetDetails, resolveImageAccess);
           const candidate = summaryTargetCandidate(effectiveOutput, sourceTokens, selected.outputDivisor, selected.sourceDivisor);
           const target = candidate !== null && candidate >= MIN_SUMMARY_TARGET ? candidate : null;
           decision.effectiveOutputTokensEstimated = effectiveOutput;
+          decision.inputIssue = budgetDetails.inputIssue;
+          if (effectiveOutput !== null) decision.budgetImageTokensEstimated = budgetDetails.imageTokens;
           decision.targetTokens = candidate;
           const current = preferences();
           decision.reason = closed ? 'closed' : options.signal?.aborted ? 'cancelled'

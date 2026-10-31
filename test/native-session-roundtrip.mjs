@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { mkdtemp, rm, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { zstdDecompressSync, zstdCompressSync } from 'node:zlib';
 import { installSummaryGuidance } from '../src/summary.mjs';
 import { SUMMARY_GUIDANCE_EVENT, SUMMARY_RESULT_EVENT } from '../src/summary-audit.mjs';
@@ -37,9 +37,22 @@ async function context() {
 }
 
 const text = value => ({ type: 'text', text: value });
+// A synthetic native attachment reference, never a user's attachment. The
+// local response stub consumes the native request without loading image blobs
+// or contacting a provider. Preserve the reference through the actual native
+// compaction and persistence paths, including its non-text metadata.
+const syntheticPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==', 'base64');
+const image = { type: 'image', attachment: {
+  attachmentId: `sha256:${createHash('sha256').update(syntheticPng).digest('hex')}`,
+  mediaType: 'image/png', bytes: syntheticPng.length, width: 1, height: 1,
+  name: 'synthetic-native-image.png',
+} };
 class TestMeter extends Service {
   constructor(ctx) { super(ctx, 'tokenMeter'); }
-  estimateMessage(message) { return 8 + Math.ceil(message.content.reduce((n, block) => n + (block.text?.length ?? 0), 0) / 4); }
+  estimateMessage(message) {
+    return 8 + message.content.reduce((n, block) => n + (block.type === 'image'
+      ? 4 + Math.ceil(JSON.stringify(block).length / 4) : Math.ceil((block.text?.length ?? 0) / 4)), 0);
+  }
   measure(session) {
     const nodes = session.surface.nodes.map(seq => {
       const tokens = this.estimateMessage(session.deriveEventMessage(session.eventAt(seq)));
@@ -54,7 +67,8 @@ class TestLlm extends Service {
     return this.ctx.waterfall(this, 'llm/stream', options, () => this.respond(options));
   }
   async *respond(options) {
-    this.calls.push({ maxTokens: options.maxTokens, messages: options.messages.map(message => ({ role: message.role, content: message.content })) });
+    this.calls.push(structuredClone({ maxTokens: options.maxTokens,
+      messages: options.messages.map(message => ({ role: message.role, content: message.content })) }));
     const content = this.calls.length === 3 ? 'oversized synthetic summary '.repeat(2000) : 'Synthetic checkpoint; continue the fixture task.';
     yield { type: 'block-start', index: 0, blockType: 'text' };
     yield { type: 'text-delta', index: 0, text: content };
@@ -77,7 +91,9 @@ async function scenario(ctx, session, logging) {
   await fiber.await();
   await audit?.ready;
   assert.equal(fiber.state, 2);
-  const source = session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [text('fixture source '.repeat(2000))] }), { surfaceOp: 'append' });
+  const source = session.append('user/message', createUserMessage({ source: { kind: 'user' },
+    content: [text('fixture source '.repeat(2000)), structuredClone(image)] }), { surfaceOp: 'append' });
+  const originalSource = structuredClone(source.data.content);
   session.append('turn/start', { turn: 1 });
   const agent = { session, options: { provider: 'fixture-provider', model: 'fixture-model' } };
   const signal = new AbortController().signal;
@@ -95,6 +111,13 @@ async function scenario(ctx, session, logging) {
   const beforeValidationFailure = structuredClone(session.surface.nodes);
   await assert.rejects(engine.compactRegion(extraSource.seq, extraSource.seq, agent, signal), /summary is not smaller/);
   assert.deepEqual(session.surface.nodes, beforeValidationFailure, 'Native post-stream validation must still reject oversized summaries.');
+  assert.deepEqual(session.eventAt(source.seq).data.content, originalSource,
+    'Compaction must retain the original native source record, including image metadata.');
+  for (const call of llm.calls.slice(0, 2)) {
+    const selected = call.messages.find(message => message.content.some(block => block.type === 'image'));
+    assert.ok(selected, 'The selected native source image must reach both compaction requests.');
+    assert.deepEqual(selected.content, originalSource, 'Guidance must not alter source text or image references.');
+  }
   session.append('turn/end', { turn: 1 });
   assert.equal(await ctx.sessions.flush(session), true);
   const result = { firstBatch, events: session.snapshotEvents(), nodes: [...session.surface.nodes],
@@ -163,12 +186,22 @@ try {
   }
   assert.equal(results[0].data.usage.outputTokens, 4096);
   assert.equal(results[1].data.usage.outputTokens, 100);
+  assert.equal(guidance[0].data.sourceImageCount, 1);
+  assert.equal(guidance[1].data.sourceImageCount, 1);
+  assert.ok(guidance[0].data.sourceImageTokensEstimated > 0);
+  assert.ok(guidance[1].data.sourceImageTokensEstimated > 0);
+  assert.ok(guidance[1].data.budgetImageTokensEstimated > 0,
+    'Applied image guidance must reserve nonzero image cost in both estimators.');
   assert.match(run.calls[1].messages.at(-1).content[0].text, /target of 2730 tokens/);
   assert.equal(expected.filter(event => event.type === 'compaction/summary').length, 1);
   assert.ok(expected.filter(event => event.type.startsWith('plugin:')).every(event => session.deriveEventMessage(event) === null));
   for (const event of [...guidance, ...results]) {
     assert.doesNotMatch(JSON.stringify(event.data), /fixture source|Synthetic checkpoint|oversized synthetic|compaction engine/,
       'Plugin records contain metadata only, not source, prompt, or summary text.');
+    assert.ok(!JSON.stringify(event.data).includes(image.attachment.attachmentId));
+    assert.ok(!JSON.stringify(event.data).includes(image.attachment.name));
+    assert.ok(!JSON.stringify(event.data).includes(syntheticPng.toString('base64')),
+      'Plugin records must not contain attachment handles, names, or image data.');
   }
   const physical = (await sessionFiles(root)).find(file => file.includes(sessionId));
   assert.ok(frames(await readFile(physical)).length >= 3, 'Two flushes produce multiple Zstd frames.');
@@ -192,6 +225,8 @@ try {
   reader = await b.ctx.sessionPersistence.open(sessionId, 'read');
   const loaded = await reader.read();
   assert.deepEqual(loaded.events, expected);
+  assert.deepEqual(loaded.events.find(event => event.type === 'user/message'
+    && event.data.content.some(block => block.type === 'image')).data.content.find(block => block.type === 'image'), image);
   assert.deepEqual(loaded.events.slice(0, run.firstBatch.length), run.firstBatch);
   assert.equal(pluginRecordOf(loaded.events.find(event => event.type === SUMMARY_GUIDANCE_EVENT && event.data.applied)).data.targetTokens, 2730);
   const restored = Session.fromRestore(sessionId, loaded.events, reader.header, reader.inheritedEventCount, loaded.eventState);
@@ -217,7 +252,8 @@ try {
   console.log(JSON.stringify({ test: 'native-session-roundtrip', hostVersion, status: 'passed',
     nativeCompactions: 3, decisions: guidance.length, results: results.length, targetTokens: 2730,
     zstdIncrementalRead: true, restoredWithoutPlugin: true, nativeRequiredEventRejection: true,
-    unchangedRequestsAndCompactionBehavior: true, liveInference: false }));
+    unchangedRequestsAndCompactionBehavior: true, nativeImagePreserved: true,
+    nonzeroSourceAndBudgetImageEstimates: true, liveInference: false }));
 } finally {
   await reader?.close();
   await writer?.close();

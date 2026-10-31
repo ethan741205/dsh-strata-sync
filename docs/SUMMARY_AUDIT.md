@@ -29,7 +29,8 @@ Both payloads contain `schemaVersion`, `pluginVersion`, `attemptId`, `provider`,
 identifies the session. Identifiers are bounded and control characters are
 rejected. Each payload has a 2,048-byte safety limit; unknown properties are
 discarded, and no request, prompt, response text, tool argument, credential,
-custom template, or raw exception message is copied into these records.
+custom template, or raw exception message is copied into these records. Input
+diagnostics also exclude image data, attachment identifiers, and file paths.
 
 The decision contains:
 
@@ -39,10 +40,57 @@ The decision contains:
 | `outputDivisor`, `sourceDivisor` | Valid selected divisors, otherwise null. |
 | `requestedMaxTokens` | The request's unchanged hard cap. |
 | `sourceTokensEstimated` | Selected-source estimate; not a tokenizer measurement. |
+| `sourceImageCount`, `sourceImageTokensEstimated` | Number of supported images in the selected source and their estimated token contribution; null when unavailable. |
 | `effectiveOutputTokensEstimated` | Estimated usable output budget, not a server-confirmed cap. |
+| `budgetImageTokensEstimated` | Estimated image contribution deducted when estimating output room; null when that estimate was not available or not attempted. |
 | `targetTokens` | Calculated candidate, including values rejected for being below 256. Null means no candidate was computed. |
 | `applied`, `appliedTargetTokens` | Whether this hook actually added the instruction; appliedTargetTokens is null unless applied. |
 | `reason` | A bounded reason code such as applied, disabled, awaiting-truncation, target-too-small, context-unavailable, settings-changed, or cancelled. |
+| `inputIssue` | Fixed classification of an input-estimation failure, or null; see the categories below. |
+
+The image-estimate fields and `inputIssue` are additive fields in schema version
+1; older records can omit them. Image estimates are heuristic contributions,
+not image-token counts reported by the server. Zero means a completed estimate
+contained no priced images, while null means the estimate was unavailable or
+not attempted. The audit never measures or stores image bytes itself.
+
+The two image estimates serve different purposes:
+
+- `sourceImageTokensEstimated` follows DSH's selected-source heuristic: each
+  image contributes `4 + ceil(JSON.stringify(imageBlockWithoutOffloaded).length
+  / 4)`. The serialized object is the whole image block, with its `offloaded`
+  property removed, not just the nested attachment reference. This prices the
+  reference structure for source selection; it is not a visual-token estimate.
+- `budgetImageTokensEstimated` reserves the provider's image heuristic of
+  `ceil(4800 / 3.5) = 1372` tokens per image, plus the image-handle text and its
+  framing. Handle-text estimation uses source dimensions conservatively and the
+  metadata-only normalized access path when available. The path and handle text
+  are used only for local estimation and are never copied into the audit.
+
+Neither estimate is a tokenizer measurement or a server-confirmed image cost.
+Images and their original message blocks remain in the request unchanged.
+
+`inputIssue` contains only these fixed enum fields. Unknown values are replaced
+with null; if `stage` or `code` is invalid, the entire issue is null. No raw
+input values, dynamic field paths, or exception text are copied.
+
+| Field | Allowed values |
+|---|---|
+| `stage` | `source`, `budget` |
+| `code` | `unsupported-image`, `image-access-unavailable`, `unsupported-file`, `unsupported-block`, `unsupported-role`, `invalid-field-type`, `invalid-json`, `empty-source`, `token-overflow` |
+| `role` | `system`, `user`, `assistant`, `tool`, `unknown`, null |
+| `blockType` | `text`, `reasoning`, `tool-call`, `image`, `file`, `unknown`, null |
+| `field` | `messages`, `content`, `text`, `name`, `arguments`, `attachment`, `attachmentId`, `mediaType`, `bytes`, `width`, `height`, `originalDimensions`, `system`, `tools`, null |
+
+For example, `reason: unsupported-input` with
+`inputIssue: { stage: source, code: invalid-field-type, role: tool, blockType:
+image, field: attachment }` identifies an invalid image-attachment field without
+recording its value. `unsupported-image` identifies an image representation the
+estimator cannot price; `image-access-unavailable` means the image access metadata
+could not be resolved or had an invalid shape. `unsupported-file` identifies an unsupported file block.
+These categories do not mean the model rejected the input. The native request
+still proceeds unchanged when guidance is skipped. A missing diagnostic in an
+older record must not be interpreted as proof of any particular input type.
 
 Calculation remains `floor(min(effectiveOutput / outputDivisor,
 sourceTokens / sourceDivisor))`. Unarmed after-truncation mode does not perform

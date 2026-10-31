@@ -17,6 +17,12 @@ The plugin reads Strata's model information, previews the changes, and updates D
 
 Strata Server is read-only to this plugin. Synchronization does not switch or load server models, change server settings, or send test inference requests. Unconfirmed model capabilities keep their existing DSH values.
 
+## What's new in 0.12.11
+
+- Summary guidance now supports native image attachments, including images returned by tools. Source-length and output-room estimates account for images separately while preserving the original messages and attachments.
+- Diagnostics identify unsupported content and invalid fields using fixed categories, with numeric image costs. Conversation text, image data, attachment identifiers and paths are never copied into audit records.
+- A truncated request with unsupported input can arm guidance for the next supported request; successful native checkpoint commitment resets recovery as before.
+
 ## What's new in 0.12.10
 
 - The supplemental summary prompt editor starts at two lines to fit the shorter default prompt, and can still be resized vertically for longer custom text.
@@ -133,6 +139,8 @@ The target is the smaller result, rounded down. All divisors accept decimals of 
 The effective output budget is an **estimate**, not the raw requested `maxTokens` or a server-confirmed cap. It is the smaller of the request's summary cap and estimated remaining context. The latter uses the smaller verified server/client window, subtracts the full prompt (including system text, tool schemas and the supplement), and allows for the supported pi-ai adapter's 4,096-token safety reserve. Text is estimated at 3.5 characters/token with extra framing. The separate source estimate uses DSH's four-character heuristic and excludes the system prompt, tools and summary instruction. Neither estimate is an exact tokenizer count.
 
 For example, a 4,096-token effective output budget with enough source content gives a **2,048-token target** in either 32K or 64K context. A 2,000-token source instead gives a **1,000-token target**. Less remaining context can reduce the target further. The target is calculated for each supported summary request; the change preview does not display a target estimate.
+
+Native PNG, JPEG, WebP and GIF attachment references are supported. The source estimate follows DSH's serialized-reference heuristic. Output-room estimation reserves at least 1,372 tokens per image using pi-ai's heuristic, plus the native image description, available access-path text and framing. Images are retained and never priced as zero; unsupported attachments and malformed fields leave the native request unchanged with a specific diagnostic category.
 
 This is a writing instruction, **not a hard output limit or a guarantee against truncation**. Reasoning may consume the same output budget; the plugin does not change reasoning, `maxTokens`, `fit_max_tokens` or compaction timing. The server's actual tokenizer, later middleware, or a different adapter version may impose a lower limit.
 

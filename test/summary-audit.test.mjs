@@ -207,6 +207,92 @@ test('records whitelist finite scalar metadata, keep below their bound, and neve
   assert.deepEqual(records(session)[1].data.usage, { outputTokens: 25 });
 });
 
+test('input diagnostics retain fixed categories and numeric image estimates without private content', () => {
+  const h = harness(), session = h.session();
+  h.start(session);
+  const call = h.audit.begin(options());
+  call.decision(decision({ applied: false, targetTokens: null, reason: 'unsupported-input',
+    sourceImageCount: 2, sourceImageTokensEstimated: 2048, budgetImageTokensEstimated: 2056,
+    inputIssue: { stage: 'source', code: 'invalid-field-type', role: 'tool', blockType: 'image', field: 'attachment',
+      text: 'PRIVATE-PROMPT', attachment: { path: 'PRIVATE-PATH', data: 'PRIVATE-IMAGE' },
+      arguments: 'PRIVATE-TOOL-ARGUMENT', error: 'PRIVATE-ERROR' },
+  }));
+  call.finish(result());
+  const saved = records(session)[0].data;
+  assert.deepEqual(saved.inputIssue, { stage: 'source', code: 'invalid-field-type', role: 'tool', blockType: 'image', field: 'attachment' });
+  assert.equal(saved.sourceImageCount, 2);
+  assert.equal(saved.sourceImageTokensEstimated, 2048);
+  assert.equal(saved.budgetImageTokensEstimated, 2056);
+  assert.equal(saved.schemaVersion, 1, 'Diagnostic fields are an additive schema extension');
+  assert.doesNotMatch(JSON.stringify(records(session)), /PRIVATE/);
+  assert.equal(records(session)[1].data.inputIssue, undefined, 'The issue belongs to the decision, not the stream result');
+});
+
+test('input diagnostic fields reject unknown values instead of copying caller strings', () => {
+  const h = harness(), session = h.session();
+  h.start(session);
+  for (const inputIssue of [
+    undefined, null, 'PRIVATE', ['PRIVATE'],
+    { stage: 'PRIVATE', code: 'unsupported-image' },
+    { stage: 'source', code: 'PRIVATE' },
+    { stage: 'budget', code: 'unsupported-file', role: 'PRIVATE', blockType: 'PRIVATE', field: 'PRIVATE' },
+  ]) {
+    const call = h.audit.begin(options());
+    call.decision(decision({ inputIssue, sourceImageCount: -0,
+      sourceImageTokensEstimated: Infinity, budgetImageTokensEstimated: 1n }));
+    call.finish(result());
+    const saved = records(session).at(-2).data;
+    assert.deepEqual(saved.inputIssue, inputIssue?.stage === 'budget'
+      ? { stage: 'budget', code: 'unsupported-file', role: null, blockType: null, field: null } : null);
+    assert.equal(saved.sourceImageCount, null);
+    assert.equal(saved.sourceImageTokensEstimated, null);
+    assert.equal(saved.budgetImageTokensEstimated, null);
+    assert.doesNotMatch(JSON.stringify(saved), /PRIVATE/);
+  }
+});
+
+test('attachment diagnostics keep only fixed field names, never attachment metadata values', () => {
+  const h = harness(), session = h.session();
+  h.start(session);
+  for (const field of ['attachmentId', 'mediaType', 'bytes', 'width', 'height', 'originalDimensions', 'name']) {
+    const call = h.audit.begin(options());
+    call.decision(decision({ applied: false, targetTokens: null, reason: 'unsupported-input',
+      inputIssue: { stage: 'source', code: 'invalid-field-type', role: 'user', blockType: 'image', field,
+        value: 'PRIVATE-ATTACHMENT-METADATA', attachmentId: 'PRIVATE-ID', mediaType: 'PRIVATE-TYPE',
+        name: 'PRIVATE-NAME', bytes: 'PRIVATE-BYTES', width: 'PRIVATE-WIDTH', height: 'PRIVATE-HEIGHT',
+        originalDimensions: { width: 'PRIVATE-ORIGINAL-WIDTH', height: 'PRIVATE-ORIGINAL-HEIGHT' } },
+    }));
+    call.finish(result());
+    const saved = records(session).at(-2).data;
+    assert.deepEqual(saved.inputIssue, { stage: 'source', code: 'invalid-field-type', role: 'user', blockType: 'image', field });
+    assert.doesNotMatch(JSON.stringify(saved), /PRIVATE/);
+    assert.ok(Buffer.byteLength(JSON.stringify(saved)) <= MAX_AUDIT_BYTES);
+  }
+});
+
+test('all classified input failures are retained within the audit payload bound', () => {
+  const h = harness({ version: 'v'.repeat(32) }), session = h.session();
+  h.start(session, 'c'.repeat(64));
+  const codes = ['unsupported-image', 'image-access-unavailable', 'unsupported-file', 'unsupported-block', 'unsupported-role',
+    'invalid-field-type', 'invalid-json', 'empty-source', 'token-overflow'];
+  for (const code of codes) {
+    const call = h.audit.begin({ ...options(), provider: 'p'.repeat(128), model: 'm'.repeat(128) });
+    call.decision(decision({ outputDivisor: Number.MAX_SAFE_INTEGER, sourceDivisor: Number.MAX_SAFE_INTEGER,
+      requestedMaxTokens: Number.MAX_SAFE_INTEGER, sourceTokensEstimated: Number.MAX_SAFE_INTEGER,
+      effectiveOutputTokensEstimated: Number.MAX_SAFE_INTEGER, targetTokens: Number.MAX_SAFE_INTEGER,
+      sourceImageCount: Number.MAX_SAFE_INTEGER, sourceImageTokensEstimated: Number.MAX_SAFE_INTEGER,
+      budgetImageTokensEstimated: Number.MAX_SAFE_INTEGER,
+      inputIssue: { stage: 'budget', code, role: 'assistant', blockType: 'tool-call', field: 'arguments' },
+    }));
+    call.finish(result());
+    const saved = records(session).at(-2).data;
+    assert.equal(saved.inputIssue.code, code);
+    assert.ok(Buffer.byteLength(JSON.stringify(saved)) <= MAX_AUDIT_BYTES);
+  }
+  assert.equal(records(session).length, codes.length * 2);
+  assert.equal(h.warnings.length, 0);
+});
+
 test('missing API, write exceptions and rejected async adapters fail open with one safe warning', async () => {
   for (const append of [null, () => { throw new Error('PRIVATE-CREDENTIAL'); }, () => Promise.reject(new Error('PRIVATE-CREDENTIAL'))]) {
     const h = harness({ append });
