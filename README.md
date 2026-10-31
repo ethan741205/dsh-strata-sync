@@ -23,15 +23,6 @@ Strata Server is read-only to this plugin. Synchronization does not switch or lo
 - Diagnostics identify unsupported content and invalid fields using fixed categories, with numeric image costs. Conversation text, image data, attachment identifiers and paths are never copied into audit records.
 - A truncated request with unsupported input can arm guidance for the next supported request; successful native checkpoint commitment resets recovery as before.
 
-## What's new in 0.12.10
-
-- The supplemental summary prompt editor starts at two lines to fit the shorter default prompt, and can still be resized vertically for longer custom text.
-
-## What's new in 0.12.9
-
-- The default summary supplement now only sets the target length: `Keep the entire checkpoint, including all required headings, within a target of {target} tokens.`
-- DSH's native summary instruction continues to define the checkpoint's content and structure. Existing custom templates remain in use until edited or reset to the default.
-
 ## What's new in 0.12.8
 
 - Native session diagnostics record each calculated summary target, whether the instruction was actually applied, and why it was skipped.
